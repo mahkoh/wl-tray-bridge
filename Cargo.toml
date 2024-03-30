@@ -1,0 +1,37 @@
+[package]
+name = "wl-tray-bridge"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = ["bussy"]
+
+[dependencies]
+ahash = "0.8.11"
+arc-swap = "1.7.1"
+async-trait = "0.1.83"
+bussy = { path = "bussy", version = "0.1.0" }
+clap_complete = "4.5.33"
+clap = { version = "4.5.20", features = ["derive"] }
+env_logger = "0.11.5"
+error_reporter = "1.0.0"
+indexmap = "2.6.0"
+isnt = "0.1.0"
+log = "0.4.22"
+memfile = "0.3.2"
+pangocairo = "0.20.4"
+parking_lot = { version = "0.12.3", features = ["send_guard"] }
+png = "0.17.14"
+rand = "0.8.5"
+resvg = "0.44.0"
+rust-ini = "0.21.1"
+serde = { version = "1.0.210", features = ["derive"] }
+shellexpand = "3.1.0"
+thiserror = "1.0.64"
+tokio = { version = "1.40.0", features = ["rt", "macros"] }
+toml = "0.8.19"
+wayland-backend = { version = "0.3.3", features = ["client_system"]}
+wayland-client = "0.31.2"
+wayland-protocols = { version = "0.32.4", features = ["client", "unstable", "staging"] }
+wayland-scanner = "0.31.1"
+zbus = { version = "4.4.0", default-features = false }

@@ -1,0 +1,19 @@
+[package]
+name = "bussy"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/mahkoh/wl-tray-bridge/bussy"
+description = "A convenient zbus wrapper"
+keywords = ["utility", "d-bus", "dbus", "ipc"]
+categories = ["os::unix-apis"]
+
+[dependencies]
+tokio = { version = "1.40.0" }
+zbus = { version = "4.4.0", default-features = false, features = ["tokio"] }
+parking_lot = "0.12.3"
+pin-project = "1.1.6"
+serde = "1.0.210"
+error_reporter = "1.0.0"
+thiserror = "1.0.64"
+log = "0.4.22"
