@@ -276,6 +276,7 @@ impl SniItem {
             &menu_id,
             move |res: Result<bool, _>| {
                 let Ok(res) = res else {
+                    callback();
                     return;
                 };
                 if res {
