@@ -33,9 +33,9 @@ pub mod ext_tray_v1 {
                 wayland_client::protocol::__interfaces::*,
                 wayland_protocols::xdg::shell::client::__interfaces::*,
             };
-            wayland_scanner::generate_interfaces!("tray-v1.xml");
+            wayland_scanner::generate_interfaces!("ext-tray-v1.xml");
         }
-        wayland_scanner::generate_client_code!("tray-v1.xml");
+        wayland_scanner::generate_client_code!("ext-tray-v1.xml");
     }
 }
 

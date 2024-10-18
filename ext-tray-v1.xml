@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<protocol name="tray_v1">
+<protocol name="ext_tray_v1">
   <copyright>
     Copyright © 2024 Julian Orth
 
@@ -123,8 +123,8 @@
     </request>
 
     <request name="ack_configure">
-      <description>
-        Acks a configuration sequence. The acked configuration sequence is
+      <description summary="ack a configuration sequence">
+        Ack a configuration sequence. The acked configuration sequence is
         double-buffered state, see wl_surface.commit.
       </description>
       <arg name="serial" type="uint" summary="the serial"/>
