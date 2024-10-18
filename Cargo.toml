@@ -10,7 +10,7 @@ members = ["bussy"]
 ahash = "0.8.11"
 arc-swap = "1.7.1"
 async-trait = "0.1.83"
-bussy = { path = "bussy", version = "0.2.0" }
+bussy = { path = "bussy", version = "0.3.0" }
 clap_complete = "4.5.33"
 clap = { version = "4.5.20", features = ["derive"] }
 env_logger = "0.11.5"
@@ -34,4 +34,4 @@ wayland-backend = { version = "0.3.3", features = ["client_system"]}
 wayland-client = "0.31.2"
 wayland-protocols = { version = "0.32.4", features = ["client", "unstable", "staging"] }
 wayland-scanner = "0.31.1"
-zbus = { version = "4.4.0", default-features = false }
+zbus = { version = "5.0.0", default-features = false }
