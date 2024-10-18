@@ -21,10 +21,6 @@
 //!   (Note that, if you are using async/await syntax for method calls, then tokio's
 //!   scheduling of tasks might get in the way of this.)
 //!
-//! Note the following caveats:
-//!
-//! - Introspection is not supported.
-//!
 //! # Example
 //!
 //! ```rust,no_run
@@ -54,9 +50,11 @@ use {
     std::{
         collections::HashMap,
         error::Error as StdError,
+        fmt::Write,
         future::Future,
         mem,
         num::NonZeroU32,
+        ops::Range,
         pin::Pin,
         sync::{
             atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed},
@@ -108,14 +106,24 @@ pub struct Connection {
     kill_queue: mpsc::UnboundedSender<Message>,
 }
 
-type ObjectMethodKey = (InterfaceName<'static>, MemberName<'static>);
-type ObjectMethodHandler = Arc<dyn Fn(PendingReply) + Send + Sync>;
-type ObjectPropertyKey = (InterfaceName<'static>, MemberName<'static>);
+struct ObjectMethodHandlerData<F: ?Sized> {
+    input: String,
+    output: String,
+    callback: F,
+}
+
+type ObjectMethodHandler = Arc<ObjectMethodHandlerData<dyn Fn(PendingReply) + Send + Sync>>;
+
+#[derive(Default)]
+struct ObjectInterfaceData {
+    methods: HashMap<MemberName<'static>, ObjectMethodHandler>,
+    properties: HashMap<MemberName<'static>, Value<'static>>,
+    signals: HashMap<MemberName<'static>, String>,
+}
 
 struct ObjectData {
     path: ObjectPath<'static>,
-    methods: Mutex<HashMap<ObjectMethodKey, ObjectMethodHandler>>,
-    properties: Mutex<HashMap<ObjectPropertyKey, Value<'static>>>,
+    interfaces: Mutex<HashMap<InterfaceName<'static>, ObjectInterfaceData>>,
 }
 
 struct SignalHandlerData<T: ?Sized> {
@@ -169,6 +177,8 @@ pub enum Error {
     MapProperty(#[source] Box<dyn StdError + Sync + Send>),
 }
 
+const DBUS_INTROSPECTABLE_NAME: InterfaceName<'static> =
+    InterfaceName::from_static_str_unchecked("org.freedesktop.DBus.Introspectable");
 const DBUS_PROPS_NAME: InterfaceName<'static> =
     InterfaceName::from_static_str_unchecked("org.freedesktop.DBus.Properties");
 const DBUS_NAME: WellKnownName<'static> =
@@ -184,6 +194,7 @@ const GET: MemberName<'static> = MemberName::from_static_str_unchecked("Get");
 const GET_ALL: MemberName<'static> = MemberName::from_static_str_unchecked("GetAll");
 const ADD_MATCH: MemberName<'static> = MemberName::from_static_str_unchecked("AddMatch");
 const REMOVE_MATCH: MemberName<'static> = MemberName::from_static_str_unchecked("RemoveMatch");
+const INTROSPECT: MemberName<'static> = MemberName::from_static_str_unchecked("Introspect");
 
 impl Drop for Connection {
     fn drop(&mut self) {
@@ -256,6 +267,7 @@ impl Shared {
                     let handler;
                     let get;
                     let get_all;
+                    let introspect;
                     let object = {
                         let shared = self.shared.lock();
                         if self.killed.load(Relaxed) {
@@ -273,13 +285,18 @@ impl Shared {
                     } else if interface == &DBUS_PROPS_NAME && member == &GET_ALL {
                         get_all = |pr: PendingReply| self.handle_get_properties(&object, pr);
                         &get_all
+                    } else if interface == &DBUS_INTROSPECTABLE_NAME && member == &INTROSPECT {
+                        introspect = |pr: PendingReply| self.handle_introspection(&object, pr);
+                        &introspect
                     } else {
-                        handler = {
-                            let methods = object.methods.lock();
-                            methods.get(&(interface.clone(), member.clone())).cloned()
-                        };
+                        handler = object
+                            .interfaces
+                            .lock()
+                            .get(interface)
+                            .and_then(|m| m.methods.get(member))
+                            .cloned();
                         match handler.as_ref() {
-                            Some(h) => &**h,
+                            Some(h) => &h.callback,
                             _ => {
                                 pr.send_err("Method does not exist");
                                 continue;
@@ -361,9 +378,10 @@ impl Shared {
                     return;
                 };
                 let prop = object
-                    .properties
+                    .interfaces
                     .lock()
-                    .get(&(interface, member))
+                    .get(&interface)
+                    .and_then(|m| m.properties.get(&member))
                     .map(|v| v.try_clone().unwrap());
                 match prop {
                     None => pr.send_err("Property does not exist"),
@@ -381,15 +399,49 @@ impl Shared {
                 pr.send_err("Invalid interface name");
                 return;
             };
-            let properties = object.properties.lock();
+            let interfaces = object.interfaces.lock();
             let mut dict = HashMap::new();
-            for ((intf, member), prop) in &*properties {
-                if &interface == intf {
+            if let Some(interface) = interfaces.get(&interface) {
+                for (member, prop) in &interface.properties {
                     dict.insert(member.as_str(), prop);
                 }
             }
             pr.send(&dict);
         });
+    }
+
+    fn handle_introspection(self: &Arc<Self>, object: &Arc<ObjectData>, mut pr: PendingReply) {
+        let interfaces = object.interfaces.lock();
+        let mut out = String::new();
+        let _ = write!(
+            out,
+            r#"<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">"#
+        );
+        let _ = write!(out, r#"<node>"#);
+        for (interface, data) in &*interfaces {
+            let _ = write!(out, r#"<interface name="{interface}">"#);
+            for (member, data) in &data.methods {
+                create_method_introspection(member, &data.input, &data.output, &mut out);
+            }
+            for (member, signature) in &data.signals {
+                create_signal_introspection(member, signature, &mut out);
+            }
+            for (member, value) in &data.properties {
+                create_property_introspection(member, value, &mut out);
+            }
+            let _ = write!(out, r#"</interface>"#);
+        }
+        for node in self.shared.lock().objects.keys() {
+            if let Some(suffix) = node.strip_prefix(object.path.as_str()) {
+                if let Some(suffix) = suffix.strip_prefix("/") {
+                    if !suffix.contains("/") {
+                        let _ = write!(out, r#"<node name="{suffix}"/>"#);
+                    }
+                }
+            }
+        }
+        let _ = write!(out, r#"</node>"#);
+        pr.send(&out);
     }
 
     fn kill_reply(&self, msg: &Message, e: Error) {
@@ -590,8 +642,7 @@ impl Shared {
             shared: self.clone(),
             data: Arc::new(ObjectData {
                 path: path.to_owned(),
-                methods: Default::default(),
-                properties: Default::default(),
+                interfaces: Default::default(),
             }),
         });
         if !self.killed.load(Relaxed) {
@@ -977,10 +1028,13 @@ impl Object {
         let interface = interface.into();
         let member = member.into();
         let value = value.into();
-        self.data.properties.lock().insert(
-            (interface.to_owned(), member.to_owned()),
-            value.try_clone().unwrap(),
-        );
+        self.data
+            .interfaces
+            .lock()
+            .entry(interface.to_owned())
+            .or_default()
+            .properties
+            .insert(member.to_owned(), value.try_clone().unwrap());
         let mut changed = HashMap::new();
         changed.insert(member.to_string(), value);
         let invalidated: Vec<String> = vec![];
@@ -1001,21 +1055,51 @@ impl Object {
     ///
     /// The [PendingReply] passed into the callback should be used to reply to the call
     /// with the expected value or an error.
+    ///
+    /// The signatures are only used for introspection.
     pub fn add_method<'a, B>(
         &self,
         interface: impl Into<InterfaceName<'a>>,
         method: impl Into<MemberName<'a>>,
+        input_signature: &str,
+        output_signature: &str,
         callback: impl Fn(B, PendingReply) + Send + Sync + 'static,
     ) where
         B: for<'b> DynamicDeserialize<'b> + Send + 'static,
     {
         let interface = interface.into();
         let method = method.into();
-        let handle = Arc::new(move |pr: PendingReply| handle_call(pr, &callback));
+        let callback = move |pr: PendingReply| handle_call(pr, &callback);
+        let handle = Arc::new(ObjectMethodHandlerData {
+            input: input_signature.to_string(),
+            output: output_signature.to_string(),
+            callback,
+        });
         self.data
-            .methods
+            .interfaces
             .lock()
-            .insert((interface.to_owned(), method.to_owned()), handle);
+            .entry(interface.to_owned())
+            .or_default()
+            .methods
+            .insert(method.to_owned(), handle);
+    }
+
+    /// Adds a signal.
+    ///
+    /// This is only used for introspection.
+    pub fn add_signal<'a>(
+        &self,
+        interface: impl Into<InterfaceName<'a>>,
+        signal: impl Into<MemberName<'a>>,
+        signature: &str,
+    ) {
+        self.data
+            .interfaces
+            .lock()
+            .entry(interface.into().to_owned())
+            .or_default()
+            .signals
+            .insert(signal.into().to_owned(), signature.to_owned());
     }
 }
 
@@ -1238,5 +1322,84 @@ impl<'m> MatchRuleBuilder<'m> {
         S: Into<Str<'m>>,
     {
         Ok(Self(self.0.arg0ns(namespace)?))
+    }
+}
+
+fn create_method_introspection(name: &str, input: &str, output: &str, out: &mut String) {
+    let _ = write!(out, r#"<method name="{name}">"#);
+    let mut i = 0;
+    for (signature, dir) in [(input, "in"), (output, "out")] {
+        for arg in args(signature) {
+            let _ = write!(
+                out,
+                r#"<arg name="arg{i}" type="{}" direction="{dir}"/>"#,
+                &signature[arg]
+            );
+            i += 1;
+        }
+    }
+    let _ = write!(out, r#"</method>"#);
+}
+
+fn create_property_introspection(name: &str, value: &Value<'_>, out: &mut String) {
+    let _ = write!(
+        out,
+        r#"<property name="{name}" type="{}" access="read"/>"#,
+        value.value_signature()
+    );
+}
+
+fn create_signal_introspection(name: &str, output: &str, out: &mut String) {
+    let _ = write!(out, r#"<signal name="{name}">"#);
+    for (i, arg) in args(output).enumerate() {
+        let _ = write!(out, r#"<arg name="arg{i}" type="{}"/>"#, &output[arg]);
+    }
+    let _ = write!(out, r#"</signal>"#);
+}
+
+struct SignatureIter<'a> {
+    pos: usize,
+    s: &'a [u8],
+}
+
+fn args(signature: &str) -> SignatureIter<'_> {
+    SignatureIter {
+        pos: 0,
+        s: signature.as_bytes(),
+    }
+}
+
+impl Iterator for SignatureIter<'_> {
+    type Item = Range<usize>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.pos == self.s.len() {
+            return None;
+        }
+        let start = self.pos;
+        self.pos += 1;
+        let c = self.s[start];
+        match c {
+            b'a' => return self.next().map(|v| start..v.end),
+            b'(' | b'{' => {
+                let end = match c {
+                    b'(' => b')',
+                    _ => b'}',
+                };
+                let mut nesting = 1;
+                while self.pos < self.s.len() && nesting > 0 {
+                    let cur = self.s[self.pos];
+                    self.pos += 1;
+                    if cur == end {
+                        nesting -= 1;
+                    }
+                    if cur == c {
+                        nesting += 1;
+                    }
+                }
+            }
+            _ => {}
+        }
+        Some(start..self.pos)
     }
 }
