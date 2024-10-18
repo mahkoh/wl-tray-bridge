@@ -22,6 +22,7 @@ use {
     ahash::AHashMap,
     bussy::Call,
     error_reporter::Report,
+    isnt::std_1::string::IsntStringExt,
     std::{sync::Arc, time::Duration},
     wayland_client::protocol::{wl_buffer::WlBuffer, wl_pointer::Axis, wl_surface::WlSurface},
     wayland_protocols::{
@@ -263,7 +264,17 @@ impl TrayItem {
             let Some(item) = items.items.get(&self.id.item) else {
                 return;
             };
-            let Some(title) = &item.props.title else {
+            let title = 'title: {
+                if let Some(tooltip) = &item.props.tooltip {
+                    if tooltip.title.is_not_empty() {
+                        break 'title &*tooltip.title;
+                    }
+                }
+                if let Some(title) = &item.props.title {
+                    if title.is_not_empty() {
+                        break 'title title;
+                    }
+                };
                 return;
             };
             let id = PopupId {

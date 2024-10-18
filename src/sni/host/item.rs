@@ -62,10 +62,10 @@ impl Debug for IconPixmap {
 
 #[derive(Value, OwnedValue, Type, Debug)]
 pub struct Tooltip {
-    icon_name: String,
-    icon_data: Vec<IconPixmap>,
-    title: String,
-    text: String,
+    pub icon_name: String,
+    pub icon_data: Vec<IconPixmap>,
+    pub title: String,
+    pub text: String,
 }
 
 static ITEM_KDE: InterfaceName<'static> =
@@ -276,6 +276,7 @@ impl SniItem {
             &menu_id,
             move |res: Result<bool, _>| {
                 let Ok(res) = res else {
+                    callback();
                     return;
                 };
                 if res {
