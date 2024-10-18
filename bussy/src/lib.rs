@@ -488,7 +488,7 @@ impl Shared {
         method: MemberName<'_>,
         body: &(impl Serialize + DynamicType),
     ) {
-        let message = Message::method(path.into_owned(), method.into_owned())
+        let message = Message::method_call(path.into_owned(), method.into_owned())
             .unwrap()
             .destination(destination.into_owned())
             .unwrap()
@@ -516,7 +516,7 @@ impl Shared {
         CB: FnOnce(Result<R, Error>) + Send + 'static,
         R: for<'a> DynamicDeserialize<'a> + 'static,
     {
-        let message = Message::method(path.into_owned(), method.into_owned())
+        let message = Message::method_call(path.into_owned(), method.into_owned())
             .unwrap()
             .destination(destination.into_owned())
             .unwrap()
@@ -1192,7 +1192,7 @@ impl PendingReply {
 
     /// Sends a success reply.
     pub fn send(&mut self, body: &(impl Serialize + DynamicType)) {
-        let msg = Message::method_reply(&self.msg)
+        let msg = Message::method_return(&self.msg.header())
             .unwrap()
             .build(body)
             .unwrap();
@@ -1202,7 +1202,7 @@ impl PendingReply {
 
     /// Sends an error reply.
     pub fn send_err(&mut self, msg: &str) {
-        let msg = Message::method_error(&self.msg, "Bussy.Unspecified")
+        let msg = Message::error(&self.msg.header(), "Bussy.Unspecified")
             .unwrap()
             .build(&msg)
             .unwrap();
@@ -1228,7 +1228,7 @@ impl Drop for PendingReply {
 ///
 /// This is a simple wrapper that allows you to not have to call [Result::unwrap] if a
 /// build step cannot fail.
-pub struct MatchRuleBuilder<'m>(zbus::MatchRuleBuilder<'m>);
+pub struct MatchRuleBuilder<'m>(zbus::match_rule::Builder<'m>);
 
 impl Default for MatchRuleBuilder<'_> {
     fn default() -> Self {
