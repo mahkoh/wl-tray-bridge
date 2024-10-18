@@ -10,7 +10,7 @@ members = ["bussy"]
 ahash = "0.8.11"
 arc-swap = "1.7.1"
 async-trait = "0.1.83"
-bussy = { path = "bussy", version = "0.1.0" }
+bussy = { path = "bussy", version = "0.2.0" }
 clap_complete = "4.5.33"
 clap = { version = "4.5.20", features = ["derive"] }
 env_logger = "0.11.5"

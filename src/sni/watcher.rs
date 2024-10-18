@@ -205,6 +205,8 @@ pub fn create_watcher(dbus: &Arc<Connection>) {
         watcher.obj.add_method(
             interface,
             REGISTER_STATUS_NOTIFIER_ITEM,
+            "s",
+            "",
             move |a: String, mut pr| {
                 w.register_status_notifier_item(fdo, &a, &pr);
                 pr.send(&());
@@ -214,6 +216,8 @@ pub fn create_watcher(dbus: &Arc<Connection>) {
         watcher.obj.add_method(
             interface,
             &REGISTER_STATUS_NOTIFIER_HOST,
+            "s",
+            "",
             move |a: String, mut pr| {
                 w.register_status_notifier_host(fdo, &a);
                 pr.send(&());
@@ -228,5 +232,14 @@ pub fn create_watcher(dbus: &Arc<Connection>) {
             &REGISTERED_STATUS_NOTIFIER_ITEMS,
             Vec::<String>::new(),
         );
+        watcher
+            .obj
+            .add_signal(interface, STATUS_NOTIFIER_ITEM_REGISTERED, "s");
+        watcher
+            .obj
+            .add_signal(interface, STATUS_NOTIFIER_ITEM_UNREGISTERED, "s");
+        watcher
+            .obj
+            .add_signal(interface, STATUS_NOTIFIER_HOST_REGISTERED, "");
     }
 }
