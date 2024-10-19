@@ -417,24 +417,26 @@ impl Host {
         ]);
         *item.signal_handlers.lock() = signal_handlers;
         self.items.lock().insert(id.to_string(), item.clone());
-        #[allow(clippy::await_holding_lock)] // nobody accesses properties until this task returns
         tokio::spawn(async move {
-            let mut props = item.properties.lock();
-            macro_rules! prepare {
+            macro_rules! get {
                 ($($name:ident, $member:ident, $ty:ty;)*) => {
                     $(
                         let $name = item.get_prop::<$ty>($member);
                     )*
-                };
-            }
-            macro_rules! get {
-                ($($name:ident;)*) => {
                     $(
-                        props.$name = $name.await.ok().map(|v| v.into());
+                        let $name = $name.await.ok();
                     )*
+                    {
+                        let mut props = item.properties.lock();
+                        $(
+                            props.$name = $name.map(|v| v.into());
+                        )*
+                    }
                 };
             }
-            prepare!(
+            let menu = item.get_prop::<OwnedObjectPath>(PROP_MENU);
+            let is_menu = item.get_prop::<bool>(PROP_ITEM_IS_MENU);
+            get! {
                 category, PROP_CATEGORY, String;
                 id, PROP_ID, String;
                 title, PROP_TITLE, String;
@@ -443,32 +445,13 @@ impl Host {
                 icon_theme_path, PROP_ICON_THEME_PATH, String;
                 icon, PROP_ICON_PIXMAP, Vec<IconPixmap>;
                 attention_icon_name, PROP_ATTENTION_ICON_NAME, String;
+                attention_movie_name, PROP_ATTENTION_MOVIE_NAME, String;
                 attention_icon, PROP_ATTENTION_ICON_PIXMAP, Vec<IconPixmap>;
                 overlay_icon_name, PROP_OVERLAY_ICON_NAME, String;
                 overlay_icon, PROP_OVERLAY_ICON_PIXMAP, Vec<IconPixmap>;
-                attention_movie_name, PROP_ATTENTION_MOVIE_NAME, String;
                 tooltip, PROP_TOOL_TIP, Tooltip;
-                menu, PROP_MENU, OwnedObjectPath;
-                is_menu, PROP_ITEM_IS_MENU, bool;
-            );
-            get!(
-                category;
-                id;
-                title;
-                status;
-                icon_name;
-                icon_theme_path;
-                icon;
-                attention_icon_name;
-                attention_movie_name;
-                attention_icon;
-                overlay_icon_name;
-                overlay_icon;
-                tooltip;
-            );
-            props.is_menu = matches!(is_menu.await, Ok(true));
-            drop(props);
-
+            }
+            item.properties.lock().is_menu = matches!(is_menu.await, Ok(true));
             let menu_path: Option<OwnedObjectPath> = menu.await.ok();
             let mut menu_delta = None;
             if let Some(path) = menu_path {
