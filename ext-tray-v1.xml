@@ -47,7 +47,7 @@
     <enum name="error">
       <description summary="fatal error">
         These fatal protocol errors may be emitted in response to
-        illegal requests.
+        invalid requests.
       </description>
       <entry name="conflicting_role" value="0"
              summary="the surface already has another role"/>
@@ -96,21 +96,26 @@
 
       The compositor can send configuration sequences at any point.
 
-      If the client attaches a null buffer, the item will no longer be
-      displayed. If the client wants the item to be displayed once again, it
-      must ack and commit the latest configuration sequence and attach and
-      commit a non-null buffer.
+      If a null buffer is committed, the item will not be displayed.
+      If the client wants the item to be displayed, it must ack and commit the
+      latest configuration sequence and attach and commit a non-null buffer.
     </description>
 
     <enum name="error">
       <description summary="fatal error">
         These fatal protocol errors may be emitted in response to
-        illegal requests.
+        invalid requests.
       </description>
       <entry name="has_popups" value="0"
              summary="the item has popups at destroy time"/>
       <entry name="has_parent" value="1"
              summary="the popup already has a parent"/>
+      <entry name="invalid_seat_serial" value="2"
+             summary="invalid serial provided to get_popup"/>
+      <entry name="invalid_configure_serial" value="3"
+             summary="invalid serial provided to ack_configure"/>
+      <entry name="invalid_keyboard_focus_hint" value="4"
+             summary="invalid keyboard focus hint provided to get_popup"/>
     </enum>
 
     <request name="destroy" type="destructor">
@@ -125,7 +130,8 @@
     <request name="ack_configure">
       <description summary="ack a configuration sequence">
         Ack a configuration sequence. The acked configuration sequence is
-        double-buffered state, see wl_surface.commit.
+        double-buffered state, see wl_surface.commit. If the compositor has
+        never sent this serial, an invalid_configure_serial error is emitted.
       </description>
       <arg name="serial" type="uint" summary="the serial"/>
     </request>
@@ -160,8 +166,10 @@
         already has a parent, the has_parent error is emitted.
 
         The seat and serial indicate the interaction that causes this popup to
-        be shown. If the client never received this serial, the compositor might
-        disconnect the client. This is compositor policy.
+        be shown. If the compositor has never sent this serial, the compositor
+        might emit the invalid_seat_serial error. This is compositor policy.
+        If the focus_hint is invalid, the invalid_keyboard_focus_hint error is
+        emitted.
 
         The focus hint indicates how the client wants keyboard focus to be
         handled for the popup. The compositor may ignore the hint. This hint has
@@ -194,9 +202,43 @@
         the edges of the surface, the compositor might crop them.
 
         The width and height are at least 1.
+
+        If this event is not part of a configuration sequence, the client should
+        assume that the value is unchanged. This event must be sent in the first
+        configuration sequence.
       </description>
       <arg name="width" type="int" summary="the optimal width in surface coordinates"/>
       <arg name="height" type="int" summary="the optimal height in surface coordinates"/>
+    </event>
+
+    <event name="preferred_anchor">
+      <description summary="preferred anchor has changed">
+        This events is sent when the preferred anchor for popup windows changes.
+        This event is part of a configuration sequence that is terminated with
+        a configure event. The client should not act on it immediately but wait
+        for the configure event.
+
+        If this event is not part of a configuration sequence, the client should
+        assume that the value is unchanged. This event must be sent in the first
+        configuration sequence.
+      </description>
+      <arg name="anchor" type="uint" enum="xdg_positioner.anchor"
+           summary="a hint for keyboard focus handling"/>
+    </event>
+
+    <event name="preferred_gravity">
+      <description summary="preferred gravity has changed">
+        This events is sent when the preferred gravity for popup windows changes.
+        This event is part of a configuration sequence that is terminated with
+        a configure event. The client should not act on it immediately but wait
+        for the configure event.
+
+        If this event is not part of a configuration sequence, the client should
+        assume that the value is unchanged. This event must be sent in the first
+        configuration sequence.
+      </description>
+      <arg name="gravity" type="uint" enum="xdg_positioner.gravity"
+           summary="a hint for keyboard focus handling"/>
     </event>
 
     <event name="configure">

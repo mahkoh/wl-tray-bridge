@@ -288,8 +288,8 @@ impl MenuInstance {
         };
         let positioner = s.xdg_wm_base.create_positioner(&s.qh, ());
         positioner.set_anchor_rect(0, 0, tray_item.size.0, tray_item.size.1);
-        positioner.set_anchor(Anchor::Bottom);
-        positioner.set_gravity(Gravity::Bottom);
+        positioner.set_anchor(tray_item.preferred_anchor);
+        positioner.set_gravity(tray_item.preferred_gravity);
         positioner.set_size(rendered.log_size.0, rendered.log_size.1);
         positioner
             .set_constraint_adjustment(ConstraintAdjustment::SlideX | ConstraintAdjustment::FlipY);
