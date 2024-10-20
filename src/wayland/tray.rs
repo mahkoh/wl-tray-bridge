@@ -17,6 +17,7 @@ use {
     },
     ahash::AHashMap,
     wayland_client::protocol::{wl_buffer::WlBuffer, wl_pointer::Axis, wl_surface::WlSurface},
+    wayland_protocols::xdg::shell::client::xdg_positioner::{Anchor, Gravity},
 };
 
 pub mod item;
@@ -306,7 +307,10 @@ impl Tray {
                 surface,
                 viewport,
                 item: ext_item,
+                pending: Default::default(),
                 size: Logical(0, 0),
+                preferred_anchor: Anchor::None,
+                preferred_gravity: Gravity::None,
                 sni: item.sni.clone(),
                 tooltip: None,
                 scale: Scale(120),

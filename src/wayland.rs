@@ -395,12 +395,23 @@ impl Dispatch<ExtTrayItemV1, TrayItemId> for State {
             Event::ConfigureSize { width, height } => {
                 tray_item.configure_size(Logical(width, height));
             }
+            Event::PreferredAnchor {
+                anchor: WEnum::Value(anchor),
+            } => {
+                tray_item.set_preferred_anchor(anchor);
+            }
+            Event::PreferredGravity {
+                gravity: WEnum::Value(gravity),
+            } => {
+                tray_item.set_preferred_gravity(gravity);
+            }
             Event::Configure { serial } => {
                 let Some(item) = state.items.items.get(&id.item) else {
                     return;
                 };
                 tray_item.configure(Some(serial), s(&state.singletons), item);
             }
+            _ => {}
         }
     }
 }

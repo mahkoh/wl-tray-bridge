@@ -42,6 +42,13 @@ pub mod icon;
 pub mod menu;
 pub mod tooltip;
 
+#[derive(Default)]
+pub struct TrayItemPending {
+    size: Option<Logical>,
+    preferred_anchor: Option<Anchor>,
+    preferred_gravity: Option<Gravity>,
+}
+
 pub struct TrayItem {
     pub(super) id: TrayItemId,
     pub(super) surface: WlSurface,
@@ -49,7 +56,10 @@ pub struct TrayItem {
     pub(super) sni: Arc<SniItem>,
     pub(super) viewport: WpViewport,
     pub(super) item: ExtTrayItemV1,
+    pub(super) pending: TrayItemPending,
     pub(super) size: Logical,
+    pub(super) preferred_anchor: Anchor,
+    pub(super) preferred_gravity: Gravity,
     pub(super) tooltip: Option<TrayItemPopup>,
     pub(super) scale: Scale,
     pub(super) buffers: BufferIcon,
@@ -87,12 +97,30 @@ impl Drop for TrayItemPopup {
 
 impl TrayItem {
     pub fn configure_size(&mut self, size: Logical) {
-        self.size = size;
+        self.pending.size = Some(size);
+    }
+
+    pub fn set_preferred_anchor(&mut self, anchor: Anchor) {
+        self.pending.preferred_anchor = Some(anchor);
+    }
+
+    pub fn set_preferred_gravity(&mut self, gravity: Gravity) {
+        self.pending.preferred_gravity = Some(gravity);
     }
 
     pub fn configure(&mut self, serial: Option<u32>, singletons: &Singletons, item: &Item) {
         if let Some(serial) = serial {
             self.item.ack_configure(serial);
+            macro_rules! apply {
+                ($name:ident) => {
+                    if let Some(v) = self.pending.$name.take() {
+                        self.$name = v;
+                    }
+                };
+            }
+            apply!(size);
+            apply!(preferred_anchor);
+            apply!(preferred_gravity);
         }
         if self.size.0 == 0 || self.size.1 == 0 {
             return;
