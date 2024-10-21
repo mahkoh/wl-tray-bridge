@@ -3,17 +3,16 @@ use {
         settings::{self},
         sni::{MutableProperty, SniItem},
         wayland::{
-            ext_tray_item_v1::KeyboardFocusHint,
             item::Items,
             scale::{Logical, Scale},
             seat::{MotionResult, MotionTimeoutTarget, Seat},
             tray::{
-                ext_tray_v1::client::ext_tray_item_v1::ExtTrayItemV1,
                 item::{
                     icon::BufferIcon,
                     menu::{MenuId, MenuInstance},
                     tooltip::{create_tooltip, Tooltip},
                 },
+                protocols::WaylandTrayItem,
                 PopupId, PopupIdType, TraySurfaceId,
             },
             Item, Singletons, TrayItemId,
@@ -55,7 +54,7 @@ pub struct TrayItem {
     pub(super) fractional_scale: Option<WpFractionalScaleV1>,
     pub(super) sni: Arc<SniItem>,
     pub(super) viewport: WpViewport,
-    pub(super) item: ExtTrayItemV1,
+    pub(super) item: Box<dyn WaylandTrayItem>,
     pub(super) pending: TrayItemPending,
     pub(super) size: Logical,
     pub(super) preferred_anchor: Anchor,
@@ -326,8 +325,7 @@ impl TrayItem {
             let xdg = s.xdg_wm_base.get_xdg_surface(&tooltip.surface, &s.qh, id);
             let popup = xdg.get_popup(None, &positioner, &s.qh, id);
             positioner.destroy();
-            self.item
-                .get_popup(&popup, seat.wl_seat(), serial, KeyboardFocusHint::None);
+            self.item.get_popup(&popup, seat.wl_seat(), serial);
             tooltip.surface.commit();
             self.tooltip = Some(TrayItemPopup {
                 tooltip,
