@@ -3,7 +3,6 @@ use {
         settings::{self},
         sni::{IconFrame, IconFrames, SniItem, SniMenuDelta, SniMenuToggleType},
         wayland::{
-            ext_tray_item_v1::KeyboardFocusHint,
             item::Items,
             scale::{Logical, Physical, Scale},
             seat::{MotionResult, Seat},
@@ -294,12 +293,9 @@ impl MenuInstance {
         positioner
             .set_constraint_adjustment(ConstraintAdjustment::SlideX | ConstraintAdjustment::FlipY);
         let open = open(tray_item.id, submenu, None, positioner, s, rendered)?;
-        tray_item.item.get_popup(
-            &open.xdg_popup,
-            seat.wl_seat(),
-            serial,
-            KeyboardFocusHint::None,
-        );
+        tray_item
+            .item
+            .get_popup(&open.xdg_popup, seat.wl_seat(), serial);
         open.surface.commit();
         Ok(Some(Self {
             sni: tray_item.sni.clone(),

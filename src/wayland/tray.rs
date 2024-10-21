@@ -6,11 +6,11 @@ use {
             scale::{Logical, Scale},
             seat::{MotionResult, Seat},
             tray::{
-                ext_tray_v1::client::ext_tray_v1::ExtTrayV1,
                 item::{
                     menu::{MenuId, MenuInstance},
                     TrayItem,
                 },
+                protocols::{ProtoName, WaylandTray},
             },
             Item, Singletons,
         },
@@ -21,24 +21,7 @@ use {
 };
 
 pub mod item;
-
-pub mod ext_tray_v1 {
-    pub mod client {
-        use {
-            self::__interfaces::*,
-            wayland_client::{self, protocol::*},
-            wayland_protocols::xdg::shell::client::*,
-        };
-        pub mod __interfaces {
-            use {
-                wayland_client::protocol::__interfaces::*,
-                wayland_protocols::xdg::shell::client::__interfaces::*,
-            };
-            wayland_scanner::generate_interfaces!("ext-tray-v1.xml");
-        }
-        wayland_scanner::generate_client_code!("ext-tray-v1.xml");
-    }
-}
+pub mod protocols;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct PopupId {
@@ -60,17 +43,26 @@ pub struct TrayItemId {
 
 pub struct Tray {
     name: u32,
-    tray: ExtTrayV1,
+    tray: Box<dyn WaylandTray>,
     items: AHashMap<SniItemId, TrayItem>,
 }
 
 #[derive(Default)]
 pub struct Trays {
+    has_ext_tray: bool,
     trays: AHashMap<u32, Tray>,
 }
 
 impl Trays {
-    pub fn create_tray(&mut self, tray: ExtTrayV1, name: u32) -> &mut Tray {
+    pub fn create_tray(&mut self, tray: Box<dyn WaylandTray>, name: u32) -> &mut Tray {
+        match tray.proto_name() {
+            ProtoName::ExtTrayV1 => {
+                if !self.has_ext_tray {
+                    self.has_ext_tray = true;
+                    self.trays.clear();
+                }
+            }
+        }
         self.trays.entry(name).or_insert(Tray {
             name,
             tray,

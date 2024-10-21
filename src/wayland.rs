@@ -13,7 +13,13 @@ use {
             scale::{Logical, Scale},
             seat::Seat,
             sni_proxy::{event_stream, EventSink},
-            tray::{item::menu::MenuId, PopupId, TrayItemId, TraySurfaceId, Trays},
+            tray::{
+                item::menu::MenuId,
+                protocols::ext_tray_v1::client::{
+                    ext_tray_item_v1, ext_tray_item_v1::ExtTrayItemV1, ext_tray_v1::ExtTrayV1,
+                },
+                PopupId, TrayItemId, TraySurfaceId, Trays,
+            },
         },
     },
     ahash::AHashMap,
@@ -27,10 +33,6 @@ use {
     },
     thiserror::Error,
     tokio::io::unix::AsyncFd,
-    tray::ext_tray_v1::client::{
-        ext_tray_item_v1::{self, ExtTrayItemV1},
-        ext_tray_v1::ExtTrayV1,
-    },
     wayland_backend::protocol::WEnum,
     wayland_client::{
         delegate_noop,
@@ -309,7 +311,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for State {
                 }
                 "ext_tray_v1" => {
                     let tray = registry.bind::<ExtTrayV1, _, _>(name, 1, qh, ());
-                    let tray = state.trays.create_tray(tray, name);
+                    let tray = state.trays.create_tray(Box::new(tray), name);
                     if let Some(s) = &state.singletons {
                         for item in state.items.items.values() {
                             tray.add_item(s, item);
