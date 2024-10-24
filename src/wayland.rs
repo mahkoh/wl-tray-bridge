@@ -15,8 +15,14 @@ use {
             sni_proxy::{event_stream, EventSink},
             tray::{
                 item::menu::MenuId,
-                protocols::ext_tray_v1::client::{
-                    ext_tray_item_v1, ext_tray_item_v1::ExtTrayItemV1, ext_tray_v1::ExtTrayV1,
+                protocols::{
+                    ext_tray_v1::client::{
+                        ext_tray_item_v1, ext_tray_item_v1::ExtTrayItemV1, ext_tray_v1::ExtTrayV1,
+                    },
+                    jay_tray_v1::client::{
+                        jay_tray_item_v1, jay_tray_item_v1::JayTrayItemV1, jay_tray_v1::JayTrayV1,
+                    },
+                    WaylandTray,
                 },
                 PopupId, TrayItemId, TraySurfaceId, Trays,
             },
@@ -47,7 +53,7 @@ use {
             wl_shm_pool::WlShmPool,
             wl_surface,
         },
-        ConnectError, Connection, Dispatch, DispatchError, QueueHandle,
+        ConnectError, Connection, Dispatch, DispatchError, Proxy, QueueHandle,
     },
     wayland_protocols::{
         wp::{
@@ -265,6 +271,28 @@ impl State {
         self.trays
             .open_root_menu(seat, &self.items, s(&self.singletons), tray_item);
     }
+
+    fn bind_tray<T>(
+        &mut self,
+        registry: &wl_registry::WlRegistry,
+        name: u32,
+        qh: &QueueHandle<Self>,
+    ) where
+        T: 'static,
+        T: WaylandTray,
+        T: Proxy,
+        Self: Dispatch<T, ()>,
+    {
+        let tray = registry.bind::<T, _, _>(name, 1, qh, ());
+        let tray = self.trays.create_tray(Box::new(tray), name);
+        if let Some(tray) = tray {
+            if let Some(s) = &self.singletons {
+                for item in self.items.items.values() {
+                    tray.add_item(s, item);
+                }
+            }
+        }
+    }
 }
 
 impl Dispatch<wl_registry::WlRegistry, ()> for State {
@@ -309,14 +337,12 @@ impl Dispatch<wl_registry::WlRegistry, ()> for State {
                     state.singletons_opt.wp_cursor_shape_manager_v1 =
                         Some(registry.bind::<WpCursorShapeManagerV1, _, _>(name, 1, qh, ()));
                 }
+                #[cfg(feature = "ext-tray")]
                 "ext_tray_v1" => {
-                    let tray = registry.bind::<ExtTrayV1, _, _>(name, 1, qh, ());
-                    let tray = state.trays.create_tray(Box::new(tray), name);
-                    if let Some(s) = &state.singletons {
-                        for item in state.items.items.values() {
-                            tray.add_item(s, item);
-                        }
-                    }
+                    state.bind_tray::<ExtTrayV1>(registry, name, qh);
+                }
+                "jay_tray_v1" => {
+                    state.bind_tray::<JayTrayV1>(registry, name, qh);
                 }
                 "wl_seat" => {
                     let seat = registry.bind::<WlSeat, _, _>(name, version.min(8), qh, name);
@@ -393,6 +419,44 @@ impl Dispatch<ExtTrayItemV1, TrayItemId> for State {
             return;
         };
         use ext_tray_item_v1::Event;
+        match event {
+            Event::ConfigureSize { width, height } => {
+                tray_item.configure_size(Logical(width, height));
+            }
+            Event::PreferredAnchor {
+                anchor: WEnum::Value(anchor),
+            } => {
+                tray_item.set_preferred_anchor(anchor);
+            }
+            Event::PreferredGravity {
+                gravity: WEnum::Value(gravity),
+            } => {
+                tray_item.set_preferred_gravity(gravity);
+            }
+            Event::Configure { serial } => {
+                let Some(item) = state.items.items.get(&id.item) else {
+                    return;
+                };
+                tray_item.configure(Some(serial), s(&state.singletons), item);
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Dispatch<JayTrayItemV1, TrayItemId> for State {
+    fn event(
+        state: &mut Self,
+        _proxy: &JayTrayItemV1,
+        event: jay_tray_item_v1::Event,
+        &id: &TrayItemId,
+        _conn: &Connection,
+        _qhandle: &QueueHandle<Self>,
+    ) {
+        let Some(tray_item) = state.trays.get_item_mut(id) else {
+            return;
+        };
+        use jay_tray_item_v1::Event;
         match event {
             Event::ConfigureSize { width, height } => {
                 tray_item.configure_size(Logical(width, height));
@@ -627,6 +691,7 @@ impl Dispatch<WlSurface, TrayItemId> for State {
 }
 
 delegate_noop!(State: ignore ExtTrayV1);
+delegate_noop!(State: ignore JayTrayV1);
 delegate_noop!(State: ignore WlCompositor);
 delegate_noop!(State: ignore WlShm);
 delegate_noop!(State: ignore WlShmPool);

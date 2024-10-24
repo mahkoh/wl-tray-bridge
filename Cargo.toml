@@ -6,6 +6,9 @@ edition = "2021"
 [workspace]
 members = ["bussy"]
 
+[features]
+ext-tray = []
+
 [dependencies]
 ahash = "0.8.11"
 arc-swap = "1.7.1"
