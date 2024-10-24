@@ -54,7 +54,7 @@ pub struct Trays {
 }
 
 impl Trays {
-    pub fn create_tray(&mut self, tray: Box<dyn WaylandTray>, name: u32) -> &mut Tray {
+    pub fn create_tray(&mut self, tray: Box<dyn WaylandTray>, name: u32) -> Option<&mut Tray> {
         match tray.proto_name() {
             ProtoName::ExtTrayV1 => {
                 if !self.has_ext_tray {
@@ -62,12 +62,17 @@ impl Trays {
                     self.trays.clear();
                 }
             }
+            ProtoName::JayTrayV1 => {
+                if self.has_ext_tray {
+                    return None;
+                }
+            }
         }
-        self.trays.entry(name).or_insert(Tray {
+        Some(self.trays.entry(name).or_insert(Tray {
             name,
             tray,
             items: Default::default(),
-        })
+        }))
     }
 
     pub fn add_item(&mut self, singletons: &Singletons, item: &Item) {

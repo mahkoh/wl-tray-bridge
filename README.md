@@ -1,11 +1,16 @@
 # wl-tray-bridge
 
 wl-tray-bridge bridges the gap between the [StatusNotifierItem][sni] protocols and
-wayland compositors implementing [ext-tray-v1][etv].
+wayland compositors implementing [jay-tray-v1][jtv].
 
 https://github.com/user-attachments/assets/95d8e934-41eb-4b63-8603-5c052cb9e52f
 
+> [!NOTE]
+> Support for the experimental [ext-tray-v1][etv] protocol can be enabled with the
+> `ext-tray` feature.
+
 [sni]: https://www.freedesktop.org/wiki/Specifications/StatusNotifierItem/
+[jtv]: https://github.com/mahkoh/jay-protocols/blob/master/unstable/jay-tray-v1.xml
 [etv]: https://gitlab.freedesktop.org/wayland/wayland-protocols/-/merge_requests/355
 
 ## Features
