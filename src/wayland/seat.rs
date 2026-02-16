@@ -1,5 +1,6 @@
 use {
     crate::wayland::{
+        Singletons, WlPointerHandler,
         item::Items,
         protocols::{
             cursor_shape_v1::wp_cursor_shape_device_v1::{
@@ -11,8 +12,7 @@ use {
                 wl_surface::WlSurfaceRef,
             },
         },
-        tray::{item::menu::MenuId, TraySurfaceId, Trays},
-        Singletons, WlPointerHandler,
+        tray::{TraySurfaceId, Trays, item::menu::MenuId},
     },
     std::{
         sync::atomic::{AtomicUsize, Ordering::Relaxed},
@@ -183,10 +183,10 @@ impl Seat {
     }
 
     pub fn handle_timeout(&mut self, items: &Items, s: &Singletons, trays: &mut Trays, id: usize) {
-        if let Some(timeout) = &self.timeout {
-            if timeout.id != id {
-                return;
-            }
+        if let Some(timeout) = &self.timeout
+            && timeout.id != id
+        {
+            return;
         };
         let Some(timeout) = self.timeout.take() else {
             return;

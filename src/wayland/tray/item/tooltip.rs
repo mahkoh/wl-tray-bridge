@@ -2,19 +2,19 @@ use {
     crate::{
         settings::{self},
         wayland::{
+            Singletons,
             protocols::{
                 viewporter::wp_viewport::WpViewport,
                 wayland::{wl_buffer::WlBuffer, wl_surface::WlSurface},
             },
             scale::{Logical, Scale},
             utils::create_shm_buf_oneshot,
-            Singletons,
         },
     },
     pangocairo::{
+        FontMap,
         cairo::{self, Format, LineCap},
         pango::{self},
-        FontMap,
     },
     std::io,
     thiserror::Error,

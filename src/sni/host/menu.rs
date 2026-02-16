@@ -67,11 +67,11 @@ impl Menu {
         let s1 = dbus.handle_messages(
             build(LAYOUT_UPDATED),
             move |(revision, menu_id): (u32, i32)| {
-                if let Some(menu) = &mut *i1.menu.lock() {
-                    if menu.revision < revision {
-                        menu.revision = revision;
-                        menu.update_layout(&i1, menu_id, None);
-                    }
+                if let Some(menu) = &mut *i1.menu.lock()
+                    && menu.revision < revision
+                {
+                    menu.revision = revision;
+                    menu.update_layout(&i1, menu_id, None);
                 }
             },
         );
@@ -133,10 +133,10 @@ impl Menu {
                     let tree = v.parse_tree();
                     let delta = m.tree.merge_nested(tree.menu_id, &mut Some(tree));
                     drop(menu);
-                    if let Some(Some(delta)) = delta {
-                        if let Some(owner) = &*item.owner.load() {
-                            owner.menu_changed(delta);
-                        }
+                    if let Some(Some(delta)) = delta
+                        && let Some(owner) = &*item.owner.load()
+                    {
+                        owner.menu_changed(delta);
                     }
                     if let Some(cb) = callback {
                         cb();
@@ -167,10 +167,10 @@ impl Menu {
                 map.insert(key, None);
             }
         }
-        if let Some(delta) = self.tree.merge_property_tree(&diff) {
-            if let Some(owner) = &*item.owner.load() {
-                owner.menu_changed(delta);
-            }
+        if let Some(delta) = self.tree.merge_property_tree(&diff)
+            && let Some(owner) = &*item.owner.load()
+        {
+            owner.menu_changed(delta);
         }
     }
 }
@@ -377,15 +377,15 @@ impl MenuTree {
         }
         let mut children = IndexMap::new();
         for c in self.children.values_mut() {
-            if new.is_some() {
-                if let Some(d) = c.merge_nested(menu_id, new) {
-                    match d {
-                        Some(d) => {
-                            children.insert(c.menu_id, Some(d));
-                            continue;
-                        }
-                        None => return Some(None),
+            if new.is_some()
+                && let Some(d) = c.merge_nested(menu_id, new)
+            {
+                match d {
+                    Some(d) => {
+                        children.insert(c.menu_id, Some(d));
+                        continue;
                     }
+                    None => return Some(None),
                 }
             }
             children.insert(c.menu_id, None);

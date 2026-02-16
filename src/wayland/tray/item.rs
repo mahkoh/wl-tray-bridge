@@ -3,6 +3,7 @@ use {
         settings::{self},
         sni::{MutableProperty, SniItem},
         wayland::{
+            Item, Singletons, TrayItemId, XdgPopupHandler, XdgSurfaceHandler,
             item::Items,
             protocols::{
                 fractional_scale_v1::wp_fractional_scale_v1::WpFractionalScaleV1,
@@ -24,15 +25,14 @@ use {
             scale::{Logical, Scale},
             seat::{MotionResult, MotionTimeoutTarget, Seat},
             tray::{
+                PopupId, PopupIdType, TraySurfaceId,
                 item::{
                     icon::BufferIcon,
                     menu::{MenuId, MenuInstance},
-                    tooltip::{create_tooltip, Tooltip},
+                    tooltip::{Tooltip, create_tooltip},
                 },
                 protocols::WaylandTrayItem,
-                PopupId, PopupIdType, TraySurfaceId,
             },
-            Item, Singletons, TrayItemId, XdgPopupHandler, XdgSurfaceHandler,
         },
     },
     ahash::AHashMap,
@@ -264,10 +264,10 @@ impl TrayItem {
         self.tooltip = None;
         self.seat_serials.remove(&seat.name());
         self.seat_positions.remove(&seat.name());
-        if let Some(id) = menu {
-            if let Some(menu) = &mut self.menu {
-                menu.handle_leave(seat, id);
-            }
+        if let Some(id) = menu
+            && let Some(menu) = &mut self.menu
+        {
+            menu.handle_leave(seat, id);
         }
     }
 
@@ -298,15 +298,15 @@ impl TrayItem {
                 return;
             };
             let title = 'title: {
-                if let Some(tooltip) = &item.props.tooltip {
-                    if tooltip.title.is_not_empty() {
-                        break 'title &*tooltip.title;
-                    }
+                if let Some(tooltip) = &item.props.tooltip
+                    && tooltip.title.is_not_empty()
+                {
+                    break 'title &*tooltip.title;
                 }
-                if let Some(title) = &item.props.title {
-                    if title.is_not_empty() {
-                        break 'title title;
-                    }
+                if let Some(title) = &item.props.title
+                    && title.is_not_empty()
+                {
+                    break 'title title;
                 };
                 return;
             };
@@ -415,10 +415,10 @@ impl TrayItem {
                 self.tooltip = None;
             }
             PopupIdType::MenuId(id) => {
-                if let Some(menu) = &mut self.menu {
-                    if !menu.popup_done(id) {
-                        self.menu = None;
-                    }
+                if let Some(menu) = &mut self.menu
+                    && !menu.popup_done(id)
+                {
+                    self.menu = None;
                 }
             }
         }

@@ -4,7 +4,7 @@ use {
         wayland::State,
     },
     std::sync::Arc,
-    tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+    tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
 };
 
 pub struct EventStream {

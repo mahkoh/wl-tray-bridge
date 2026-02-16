@@ -49,10 +49,10 @@ use {
             },
             scale::{Logical, Scale},
             seat::Seat,
-            sni_proxy::{event_stream, EventSink},
+            sni_proxy::{EventSink, event_stream},
             tray::{
-                item::menu::MenuId, protocols::WaylandTray, PopupId, TrayItemId, TraySurfaceId,
-                Trays,
+                PopupId, TrayItemId, TraySurfaceId, Trays, item::menu::MenuId,
+                protocols::WaylandTray,
             },
         },
     },
@@ -65,8 +65,8 @@ use {
     thiserror::Error,
     tokio::select,
     wl_client::{
-        proxy::{self, OwnedProxy},
         Fixed, Libwayland,
+        proxy::{self, OwnedProxy},
     },
 };
 
@@ -253,11 +253,11 @@ impl State {
     {
         let tray = registry.bind::<T>(name, 1);
         let tray = self.trays.create_tray(Box::new(tray), name);
-        if let Some(tray) = tray {
-            if let Some(s) = &self.singletons {
-                for item in self.items.items.values() {
-                    tray.add_item(s, item);
-                }
+        if let Some(tray) = tray
+            && let Some(s) = &self.singletons
+        {
+            for item in self.items.items.values() {
+                tray.add_item(s, item);
             }
         }
     }
