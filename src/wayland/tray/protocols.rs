@@ -1,62 +1,41 @@
-use {
-    crate::wayland::{tray::TrayItemId, State},
-    wayland_client::{
-        protocol::{wl_seat::WlSeat, wl_surface::WlSurface},
-        QueueHandle,
+use crate::wayland::{
+    protocols::{
+        wayland::{wl_seat::WlSeat, wl_surface::WlSurface},
+        xdg_shell::xdg_popup::XdgPopup,
     },
-    wayland_protocols::xdg::shell::client::xdg_popup::XdgPopup,
+    tray::TrayItemId,
 };
 
 pub mod ext_tray_v1 {
     use {
         crate::wayland::{
-            tray::{
-                protocols::{
-                    ext_tray_v1::client::{
-                        ext_tray_item_v1::{ExtTrayItemV1, KeyboardFocusHint},
-                        ext_tray_v1::ExtTrayV1,
-                    },
-                    ProtoName, WaylandTray, WaylandTrayItem,
+            protocols::{
+                ext_tray_v1::{
+                    ext_tray_item_v1::{ExtTrayItemV1, ExtTrayItemV1KeyboardFocusHint},
+                    ext_tray_v1::ExtTrayV1,
                 },
+                wayland::{wl_seat::WlSeat, wl_surface::WlSurface},
+                xdg_shell::xdg_popup::XdgPopup,
+            },
+            tray::{
+                protocols::{ProtoName, WaylandTray, WaylandTrayItem},
                 TrayItemId,
             },
-            State,
+            ExtTrayItemV1Handler,
         },
-        wayland_client::{
-            protocol::{wl_seat::WlSeat, wl_surface::WlSurface},
-            QueueHandle,
-        },
-        wayland_protocols::xdg::shell::client::xdg_popup::XdgPopup,
+        std::ops::Deref,
+        wl_client::proxy,
     };
-
-    pub mod client {
-        use {
-            self::__interfaces::*,
-            wayland_client::{self, protocol::*},
-            wayland_protocols::xdg::shell::client::*,
-        };
-        pub mod __interfaces {
-            use {
-                wayland_client::protocol::__interfaces::*,
-                wayland_protocols::xdg::shell::client::__interfaces::*,
-            };
-            wayland_scanner::generate_interfaces!("ext-tray-v1.xml");
-        }
-        wayland_scanner::generate_client_code!("ext-tray-v1.xml");
-    }
 
     impl WaylandTray for ExtTrayV1 {
         fn proto_name(&self) -> ProtoName {
             ProtoName::ExtTrayV1
         }
 
-        fn get_tray_item(
-            &self,
-            surface: &WlSurface,
-            qh: &QueueHandle<State>,
-            id: TrayItemId,
-        ) -> Box<dyn WaylandTrayItem> {
-            Box::new(self.get_tray_item(surface, qh, id))
+        fn get_tray_item(&self, surface: &WlSurface, id: TrayItemId) -> Box<dyn WaylandTrayItem> {
+            let item = self.get_tray_item(surface);
+            proxy::set_event_handler(&item, ExtTrayItemV1Handler { id });
+            Box::new(item)
         }
     }
 
@@ -66,11 +45,12 @@ pub mod ext_tray_v1 {
         }
 
         fn ack_configure(&self, serial: u32) {
-            self.ack_configure(serial);
+            self.deref().ack_configure(serial);
         }
 
         fn get_popup(&self, popup: &XdgPopup, seat: &WlSeat, serial: u32) {
-            self.get_popup(popup, seat, serial, KeyboardFocusHint::None);
+            self.deref()
+                .get_popup(popup, seat, serial, ExtTrayItemV1KeyboardFocusHint::NONE);
         }
     }
 }
@@ -78,53 +58,33 @@ pub mod ext_tray_v1 {
 pub mod jay_tray_v1 {
     use {
         crate::wayland::{
-            tray::{
-                protocols::{
-                    jay_tray_v1::client::{
-                        jay_tray_item_v1::{JayTrayItemV1, KeyboardFocusHint},
-                        jay_tray_v1::JayTrayV1,
-                    },
-                    ProtoName, WaylandTray, WaylandTrayItem,
+            protocols::{
+                jay_tray_v1::{
+                    jay_tray_item_v1::{JayTrayItemV1, JayTrayItemV1KeyboardFocusHint},
+                    jay_tray_v1::JayTrayV1,
                 },
+                wayland::{wl_seat::WlSeat, wl_surface::WlSurface},
+                xdg_shell::xdg_popup::XdgPopup,
+            },
+            tray::{
+                protocols::{ProtoName, WaylandTray, WaylandTrayItem},
                 TrayItemId,
             },
-            State,
+            JayTrayItemV1Handler,
         },
-        wayland_client::{
-            protocol::{wl_seat::WlSeat, wl_surface::WlSurface},
-            QueueHandle,
-        },
-        wayland_protocols::xdg::shell::client::xdg_popup::XdgPopup,
+        std::ops::Deref,
+        wl_client::proxy,
     };
-
-    pub mod client {
-        use {
-            self::__interfaces::*,
-            wayland_client::{self, protocol::*},
-            wayland_protocols::xdg::shell::client::*,
-        };
-        pub mod __interfaces {
-            use {
-                wayland_client::protocol::__interfaces::*,
-                wayland_protocols::xdg::shell::client::__interfaces::*,
-            };
-            wayland_scanner::generate_interfaces!("jay-tray-v1.xml");
-        }
-        wayland_scanner::generate_client_code!("jay-tray-v1.xml");
-    }
 
     impl WaylandTray for JayTrayV1 {
         fn proto_name(&self) -> ProtoName {
             ProtoName::JayTrayV1
         }
 
-        fn get_tray_item(
-            &self,
-            surface: &WlSurface,
-            qh: &QueueHandle<State>,
-            id: TrayItemId,
-        ) -> Box<dyn WaylandTrayItem> {
-            Box::new(self.get_tray_item(surface, qh, id))
+        fn get_tray_item(&self, surface: &WlSurface, id: TrayItemId) -> Box<dyn WaylandTrayItem> {
+            let item = self.get_tray_item(surface);
+            proxy::set_event_handler(&item, JayTrayItemV1Handler { id });
+            Box::new(item)
         }
     }
 
@@ -134,11 +94,12 @@ pub mod jay_tray_v1 {
         }
 
         fn ack_configure(&self, serial: u32) {
-            self.ack_configure(serial);
+            self.deref().ack_configure(serial);
         }
 
         fn get_popup(&self, popup: &XdgPopup, seat: &WlSeat, serial: u32) {
-            self.get_popup(popup, seat, serial, KeyboardFocusHint::None);
+            self.deref()
+                .get_popup(popup, seat, serial, JayTrayItemV1KeyboardFocusHint::NONE);
         }
     }
 }
@@ -151,12 +112,7 @@ pub enum ProtoName {
 
 pub trait WaylandTray {
     fn proto_name(&self) -> ProtoName;
-    fn get_tray_item(
-        &self,
-        surface: &WlSurface,
-        qh: &QueueHandle<State>,
-        id: TrayItemId,
-    ) -> Box<dyn WaylandTrayItem>;
+    fn get_tray_item(&self, surface: &WlSurface, id: TrayItemId) -> Box<dyn WaylandTrayItem>;
 }
 
 pub trait WaylandTrayItem {

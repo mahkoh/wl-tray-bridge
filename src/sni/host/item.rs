@@ -1,10 +1,13 @@
 use {
-    crate::sni::{
-        host::{
-            menu::{Menu, DBUS_MENU},
-            Host,
+    crate::{
+        sni::{
+            host::{
+                menu::{Menu, DBUS_MENU},
+                Host,
+            },
+            SniMenuDelta,
         },
-        SniMenuDelta,
+        wayland::protocols::wayland::wl_pointer::WlPointerAxis,
     },
     arc_swap::ArcSwapOption,
     bussy::{Call, CallFuture, MatchRuleBuilder, SignalHandler},
@@ -15,7 +18,6 @@ use {
         sync::Arc,
         time::UNIX_EPOCH,
     },
-    wayland_client::protocol::wl_pointer::Axis,
     zbus::{
         names::{BusName, InterfaceName, MemberName},
         zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Type, Value},
@@ -220,10 +222,10 @@ impl SniItem {
         self.activate_(SECONDARY_ACTIVATE, cb)
     }
 
-    pub fn scroll(&self, delta: i32, axis: Axis) {
+    pub fn scroll(&self, delta: i32, axis: WlPointerAxis) {
         let orientation = match axis {
-            Axis::VerticalScroll => "vertical",
-            Axis::HorizontalScroll => "horizontal",
+            WlPointerAxis::VERTICAL_SCROLL => "vertical",
+            WlPointerAxis::HORIZONTAL_SCROLL => "horizontal",
             _ => return,
         };
         self.host.dbus.call_no_reply(

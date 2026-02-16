@@ -33,8 +33,8 @@ shellexpand = "3.1.0"
 thiserror = "1.0.64"
 tokio = { version = "1.40.0", features = ["rt", "macros"] }
 toml = "0.8.19"
-wayland-backend = { version = "0.3.3", features = ["client_system"]}
-wayland-client = "0.31.2"
-wayland-protocols = { version = "0.32.4", features = ["client", "unstable", "staging"] }
-wayland-scanner = "0.31.1"
+wl-client = "0.2.0"
 zbus = { version = "5.0.0", default-features = false }
+
+[build-dependencies]
+wl-client-builder = "0.2.0"

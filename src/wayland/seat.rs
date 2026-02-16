@@ -1,22 +1,25 @@
 use {
     crate::wayland::{
         item::Items,
+        protocols::{
+            cursor_shape_v1::wp_cursor_shape_device_v1::{
+                WpCursorShapeDeviceV1, WpCursorShapeDeviceV1Shape,
+            },
+            wayland::{
+                wl_pointer::{WlPointer, WlPointerAxis},
+                wl_seat::{WlSeat, WlSeatCapability},
+                wl_surface::WlSurfaceRef,
+            },
+        },
         tray::{item::menu::MenuId, TraySurfaceId, Trays},
-        Singletons,
+        Singletons, WlPointerHandler,
     },
     std::{
         sync::atomic::{AtomicUsize, Ordering::Relaxed},
         time::Duration,
     },
     tokio::task::JoinHandle,
-    wayland_client::protocol::{
-        wl_pointer::{Axis, WlPointer},
-        wl_seat::{Capability, WlSeat},
-        wl_surface::WlSurface,
-    },
-    wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_device_v1::{
-        Shape, WpCursorShapeDeviceV1,
-    },
+    wl_client::proxy,
 };
 
 pub struct Seat {
@@ -93,15 +96,14 @@ impl Seat {
         &mut self,
         s: &Singletons,
         trays: &mut Trays,
-        capabilities: Capability,
+        capabilities: WlSeatCapability,
     ) {
-        let want_pointer = capabilities.contains(Capability::Pointer);
+        let want_pointer = capabilities.contains(WlSeatCapability::POINTER);
         if want_pointer {
             if self.pointer.is_none() {
-                let pointer = self.seat.get_pointer(&s.qh, self.name);
-                let shape = s
-                    .wp_cursor_shape_manager_v1
-                    .get_pointer(&pointer, &s.qh, ());
+                let pointer = self.seat.get_pointer();
+                proxy::set_event_handler(&pointer, WlPointerHandler { name: self.name });
+                let shape = s.wp_cursor_shape_manager_v1.get_pointer(&pointer);
                 self.pointer = Some(Pointer { pointer, shape });
             }
         } else {
@@ -124,16 +126,18 @@ impl Seat {
         items: &Items,
         s: &Singletons,
         trays: &mut Trays,
-        surface: WlSurface,
+        surface: &WlSurfaceRef,
         x: i32,
         y: i32,
         serial: u32,
     ) {
         self.handle_pointer_leave(trays);
         if let Some(pointer) = &self.pointer {
-            pointer.shape.set_shape(serial, Shape::Default);
+            pointer
+                .shape
+                .set_shape(serial, WpCursorShapeDeviceV1Shape::DEFAULT);
         }
-        let Some(surface) = trays.find_surface(&surface) else {
+        let Some(surface) = trays.find_surface(surface) else {
             return;
         };
         self.focus = Some(surface);
@@ -210,8 +214,8 @@ impl Seat {
         trays.handle_button(self, serial, id, s, item, button);
     }
 
-    pub fn handle_axis_value120(&mut self, trays: &mut Trays, axis: Axis, value120: i32) {
-        let accu = &mut self.scroll[axis as usize];
+    pub fn handle_axis_value120(&mut self, trays: &mut Trays, axis: WlPointerAxis, value120: i32) {
+        let accu = &mut self.scroll[axis.0 as usize];
         *accu += value120;
         let steps = *accu / 120;
         *accu -= steps * 120;

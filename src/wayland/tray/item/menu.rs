@@ -4,6 +4,21 @@ use {
         sni::{IconFrame, IconFrames, SniItem, SniMenuDelta, SniMenuToggleType},
         wayland::{
             item::Items,
+            protocols::{
+                viewporter::wp_viewport::WpViewport,
+                wayland::{
+                    wl_buffer::{WlBuffer, WlBufferRef},
+                    wl_surface::{WlSurface, WlSurfaceRef},
+                },
+                xdg_shell::{
+                    xdg_popup::XdgPopup,
+                    xdg_positioner::{
+                        XdgPositioner, XdgPositionerAnchor, XdgPositionerConstraintAdjustment,
+                        XdgPositionerGravity,
+                    },
+                    xdg_surface::{XdgSurface, XdgSurfaceRef},
+                },
+            },
             scale::{Logical, Physical, Scale},
             seat::{MotionResult, Seat},
             tray::{
@@ -14,7 +29,7 @@ use {
                 PopupIdType, TraySurfaceId,
             },
             utils::create_shm_buf,
-            PopupId, Singletons, TrayItemId,
+            PopupId, Singletons, TrayItemId, XdgPopupHandler, XdgSurfaceHandler,
         },
     },
     ahash::{AHashMap, AHashSet},
@@ -35,15 +50,7 @@ use {
         sync::Arc,
     },
     thiserror::Error,
-    wayland_client::protocol::{wl_buffer::WlBuffer, wl_surface::WlSurface},
-    wayland_protocols::{
-        wp::viewporter::client::wp_viewport::WpViewport,
-        xdg::shell::client::{
-            xdg_popup::XdgPopup,
-            xdg_positioner::{Anchor, ConstraintAdjustment, Gravity, XdgPositioner},
-            xdg_surface::XdgSurface,
-        },
-    },
+    wl_client::proxy,
 };
 
 #[derive(Debug, Error)]
@@ -285,13 +292,14 @@ impl MenuInstance {
         let Some(rendered) = rendered else {
             return Ok(None);
         };
-        let positioner = s.xdg_wm_base.create_positioner(&s.qh, ());
+        let positioner = s.xdg_wm_base.create_positioner();
         positioner.set_anchor_rect(0, 0, tray_item.size.0, tray_item.size.1);
         positioner.set_anchor(tray_item.preferred_anchor);
         positioner.set_gravity(tray_item.preferred_gravity);
         positioner.set_size(rendered.log_size.0, rendered.log_size.1);
-        positioner
-            .set_constraint_adjustment(ConstraintAdjustment::SlideX | ConstraintAdjustment::FlipY);
+        positioner.set_constraint_adjustment(
+            XdgPositionerConstraintAdjustment::SLIDE_X | XdgPositionerConstraintAdjustment::FLIP_Y,
+        );
         let open = open(tray_item.id, submenu, None, positioner, s, rendered)?;
         tray_item
             .item
@@ -361,21 +369,22 @@ impl MenuInstance {
             return Ok(());
         };
         let y1 = y1 - rendered.log_space_top;
-        let positioner = s.xdg_wm_base.create_positioner(&s.qh, ());
+        let positioner = s.xdg_wm_base.create_positioner();
         positioner.set_size(rendered.log_size.0, rendered.log_size.1);
         positioner.set_anchor_rect(0, y1, parent.log_size.0, y2 - y1);
         match settings::get().menu.rtl {
             true => {
-                positioner.set_anchor(Anchor::TopLeft);
-                positioner.set_gravity(Gravity::BottomLeft);
+                positioner.set_anchor(XdgPositionerAnchor::TOP_LEFT);
+                positioner.set_gravity(XdgPositionerGravity::BOTTOM_LEFT);
             }
             false => {
-                positioner.set_anchor(Anchor::TopRight);
-                positioner.set_gravity(Gravity::BottomRight);
+                positioner.set_anchor(XdgPositionerAnchor::TOP_RIGHT);
+                positioner.set_gravity(XdgPositionerGravity::BOTTOM_RIGHT);
             }
         }
-        positioner
-            .set_constraint_adjustment(ConstraintAdjustment::FlipX | ConstraintAdjustment::SlideY);
+        positioner.set_constraint_adjustment(
+            XdgPositionerConstraintAdjustment::FLIP_X | XdgPositionerConstraintAdjustment::SLIDE_Y,
+        );
         let open = open(
             self.tray_item,
             submenu,
@@ -427,7 +436,7 @@ impl MenuInstance {
         self.open.repositioned(id, token);
     }
 
-    pub fn handle_buffer_released(&mut self, menu: MenuId, buffer: &WlBuffer) {
+    pub fn handle_buffer_released(&mut self, menu: MenuId, buffer: &WlBufferRef) {
         self.open.handle_buffer_released(menu, buffer);
     }
 
@@ -439,7 +448,7 @@ impl MenuInstance {
         self.open.popup_done(id)
     }
 
-    pub fn find_surface(&self, surface: &WlSurface) -> Option<TraySurfaceId> {
+    pub fn find_surface(&self, surface: &WlSurfaceRef) -> Option<TraySurfaceId> {
         Some(TraySurfaceId {
             item: self.tray_item,
             menu: Some(self.open.find_surface(surface)?),
@@ -504,8 +513,8 @@ impl MenuInstance {
 }
 
 impl OpenMenu {
-    pub fn find_surface(&self, surface: &WlSurface) -> Option<MenuId> {
-        if &self.surface == surface {
+    pub fn find_surface(&self, surface: &WlSurfaceRef) -> Option<MenuId> {
+        if self.surface == *surface {
             return Some(self.id);
         }
         if let Some(menu) = &self.child {
@@ -536,7 +545,7 @@ impl OpenMenu {
         }
     }
 
-    pub fn handle_buffer_released(&mut self, id: MenuId, buffer: &WlBuffer) {
+    pub fn handle_buffer_released(&mut self, id: MenuId, buffer: &WlBufferRef) {
         if self.id == id {
             for menu_buffer in [&mut self.back_buffer, &mut self.front_buffer] {
                 if menu_buffer.buffer == *buffer {
@@ -778,7 +787,7 @@ fn create_buffer(
 fn open(
     tray_item: TrayItemId,
     menu: &SubMenu,
-    parent: Option<&XdgSurface>,
+    parent: Option<&XdgSurfaceRef>,
     positioner: XdgPositioner,
     s: &Singletons,
     rendered: RenderedMenu,
@@ -787,10 +796,12 @@ fn open(
         tray_item,
         ty: PopupIdType::MenuId(menu.id),
     };
-    let surface = s.wl_compositor.create_surface(&s.qh, ());
-    let viewport = s.wp_viewporter.get_viewport(&surface, &s.qh, ());
-    let xdg_surface = s.xdg_wm_base.get_xdg_surface(&surface, &s.qh, id);
-    let xdg_popup = xdg_surface.get_popup(parent, &positioner, &s.qh, id);
+    let surface = s.wl_compositor.create_surface();
+    let viewport = s.wp_viewporter.get_viewport(&surface);
+    let xdg_surface = s.xdg_wm_base.get_xdg_surface(&surface);
+    proxy::set_event_handler(&xdg_surface, XdgSurfaceHandler { id });
+    let xdg_popup = xdg_surface.get_popup(parent, &positioner);
+    proxy::set_event_handler(&xdg_popup, XdgPopupHandler { id });
     let create_buffer =
         || create_buffer(tray_item, menu, s, &rendered).map_err(MenuError::CreateMemfd);
     Ok(OpenMenu {

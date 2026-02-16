@@ -3,10 +3,7 @@ use {
         sni::{self, MutableProperty, SniItem, SniItemOwner, SniMenuDelta},
         wayland::State,
     },
-    std::{
-        sync::Arc,
-        task::{Context, Poll},
-    },
+    std::sync::Arc,
     tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
 };
 
@@ -33,10 +30,8 @@ impl EventSink {
 }
 
 impl EventStream {
-    pub fn poll(&mut self, cx: &mut Context<'_>, state: &mut State) {
-        while let Poll::Ready(Some(action)) = self.recv.poll_recv(cx) {
-            action(state);
-        }
+    pub async fn poll(&mut self) -> Option<Action> {
+        self.recv.recv().await
     }
 }
 

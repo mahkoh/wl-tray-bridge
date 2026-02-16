@@ -2,7 +2,9 @@ use {
     crate::{
         settings::ThemeColor,
         sni::IconFrames,
-        wayland::{utils::create_shm_buf_oneshot, Singletons},
+        wayland::{
+            protocols::wayland::wl_buffer::WlBuffer, utils::create_shm_buf_oneshot, Singletons,
+        },
     },
     ahash::{AHashMap, AHashSet},
     error_reporter::Report,
@@ -25,7 +27,6 @@ use {
         },
     },
     thiserror::Error,
-    wayland_client::protocol::wl_buffer::WlBuffer,
 };
 
 static VERSION: AtomicUsize = AtomicUsize::new(1);
