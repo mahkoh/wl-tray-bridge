@@ -3,12 +3,14 @@ use {
         settings::{self},
         sni::{IconFrame, IconFrames, SniItem, SniMenuDelta, SniMenuToggleType},
         wayland::{
-            PopupId, Singletons, TrayItemId, XdgPopupHandler, XdgSurfaceHandler,
+            PopupId, Singletons, SurfaceReleaseEventHandler, TrayItemId, XdgPopupHandler,
+            XdgSurfaceHandler,
             item::Items,
             protocols::{
                 viewporter::wp_viewport::WpViewport,
                 wayland::{
                     wl_buffer::{WlBuffer, WlBufferRef},
+                    wl_callback::WlCallback,
                     wl_surface::{WlSurface, WlSurfaceRef},
                 },
                 xdg_shell::{
@@ -47,7 +49,10 @@ use {
         f64::consts::PI,
         io::{self, Seek, SeekFrom, Write},
         mem,
-        sync::Arc,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering::Relaxed},
+        },
     },
     thiserror::Error,
     wl_client::proxy,
@@ -142,7 +147,18 @@ struct OpenMenuRow {
 struct MenuBuffer {
     buffer: WlBuffer,
     memfile: MemFile,
-    free: bool,
+    free: Arc<AtomicBool>,
+    pending_release: Option<PendingRelease>,
+}
+
+struct PendingRelease {
+    release: WlCallback,
+}
+
+impl Drop for PendingRelease {
+    fn drop(&mut self) {
+        proxy::destroy(&self.release);
+    }
 }
 
 impl Drop for MenuBuffer {
@@ -549,7 +565,7 @@ impl OpenMenu {
         if self.id == id {
             for menu_buffer in [&mut self.back_buffer, &mut self.front_buffer] {
                 if menu_buffer.buffer == *buffer {
-                    menu_buffer.free = true;
+                    menu_buffer.free.store(true, Relaxed);
                 }
             }
         } else {
@@ -682,7 +698,7 @@ impl OpenMenu {
                 self.front_buffer = create_buffer()?;
                 self.back_buffer = create_buffer()?;
             } else {
-                if !self.back_buffer.free {
+                if !self.back_buffer.free.load(Relaxed) {
                     self.back_buffer = create_buffer()?;
                 }
                 self.back_buffer
@@ -730,10 +746,20 @@ impl OpenMenu {
 
     fn swap(&mut self) {
         mem::swap(&mut self.front_buffer, &mut self.back_buffer);
-        self.front_buffer.free = false;
+        self.front_buffer.free.store(false, Relaxed);
         self.viewport
             .set_destination(self.log_size.0, self.log_size.1);
         self.surface.attach(Some(&self.front_buffer.buffer), 0, 0);
+        if proxy::version(&*self.surface) >= WlSurface::REQ__GET_RELEASE__SINCE {
+            let release = self.surface.get_release();
+            proxy::set_event_handler(
+                &release,
+                SurfaceReleaseEventHandler {
+                    free: self.front_buffer.free.clone(),
+                },
+            );
+            self.front_buffer.pending_release = Some(PendingRelease { release });
+        }
         self.surface.damage_buffer(0, 0, i32::MAX, i32::MAX);
         self.surface.commit();
     }
@@ -780,7 +806,8 @@ fn create_buffer(
     Ok(MenuBuffer {
         buffer,
         memfile,
-        free: true,
+        free: Arc::new(AtomicBool::new(true)),
+        pending_release: None,
     })
 }
 

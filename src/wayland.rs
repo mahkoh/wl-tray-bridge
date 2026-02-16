@@ -60,7 +60,10 @@ use {
     std::{
         convert::Infallible,
         io::{self},
-        sync::Arc,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering::Relaxed},
+        },
     },
     thiserror::Error,
     tokio::select,
@@ -279,7 +282,7 @@ impl WlRegistryEventHandler for WlRegistryHandler {
         let registry = &state.registry;
         match interface {
             WlCompositor::INTERFACE => {
-                state.singletons_opt.wl_compositor = Some(registry.bind(name, 4));
+                state.singletons_opt.wl_compositor = Some(registry.bind(name, version.min(7)));
             }
             WlShm::INTERFACE => {
                 state.singletons_opt.wl_shm = Some(registry.bind(name, 1));
@@ -689,5 +692,17 @@ impl WlSurfaceEventHandler for WlSurfaceHandler {
             let scale = Scale(factor * 120);
             state.trays.handle_scale(&state.items, s, self.id, scale);
         }
+    }
+}
+
+struct SurfaceReleaseEventHandler {
+    free: Arc<AtomicBool>,
+}
+
+impl WlCallbackEventHandler for SurfaceReleaseEventHandler {
+    type Data = State;
+
+    fn done(&self, _state: &mut Self::Data, _slf: &WlCallbackRef, _callback_data: u32) {
+        self.free.store(true, Relaxed);
     }
 }

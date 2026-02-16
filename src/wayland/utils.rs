@@ -1,7 +1,7 @@
 use {
     crate::wayland::{
         Singletons, WlBufferHandler,
-        protocols::wayland::{wl_buffer::WlBuffer, wl_shm::WlShmFormat},
+        protocols::wayland::{wl_buffer::WlBuffer, wl_shm::WlShmFormat, wl_surface::WlSurface},
         tray::TraySurfaceId,
     },
     memfile::{MemFile, Seal},
@@ -28,7 +28,9 @@ pub fn create_shm_buf(
     memfd.write_all(data)?;
     let pool = s.wl_shm.create_pool(memfd.as_fd(), data.len() as _);
     let buffer = pool.create_buffer(0, size.0, size.1, size.0 * 4, WlShmFormat::ARGB8888);
-    if let Some(id) = surface {
+    if let Some(id) = surface
+        && proxy::version(&*s.wl_compositor) < WlSurface::REQ__GET_RELEASE__SINCE
+    {
         proxy::set_event_handler(&buffer, WlBufferHandler { id });
     }
     pool.destroy();
