@@ -467,10 +467,10 @@ impl Host {
                 let mut status = item.status.lock();
                 if *status == ItemStatus::New {
                     (item.host.callback)(&item);
-                    if let Some(delta) = menu_delta {
-                        if let Some(owner) = &*item.owner.load() {
-                            owner.menu_changed(delta);
-                        }
+                    if let Some(delta) = menu_delta
+                        && let Some(owner) = &*item.owner.load()
+                    {
+                        owner.menu_changed(delta);
                     }
                 }
                 *status = ItemStatus::Announced;

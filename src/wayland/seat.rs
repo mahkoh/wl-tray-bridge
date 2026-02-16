@@ -183,10 +183,10 @@ impl Seat {
     }
 
     pub fn handle_timeout(&mut self, items: &Items, s: &Singletons, trays: &mut Trays, id: usize) {
-        if let Some(timeout) = &self.timeout {
-            if timeout.id != id {
-                return;
-            }
+        if let Some(timeout) = &self.timeout
+            && timeout.id != id
+        {
+            return;
         };
         let Some(timeout) = self.timeout.take() else {
             return;

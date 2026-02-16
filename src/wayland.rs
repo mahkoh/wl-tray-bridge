@@ -253,11 +253,11 @@ impl State {
     {
         let tray = registry.bind::<T>(name, 1);
         let tray = self.trays.create_tray(Box::new(tray), name);
-        if let Some(tray) = tray {
-            if let Some(s) = &self.singletons {
-                for item in self.items.items.values() {
-                    tray.add_item(s, item);
-                }
+        if let Some(tray) = tray
+            && let Some(s) = &self.singletons
+        {
+            for item in self.items.items.values() {
+                tray.add_item(s, item);
             }
         }
     }

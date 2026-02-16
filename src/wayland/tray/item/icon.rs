@@ -97,10 +97,10 @@ impl IconTemplate {
     }
 
     pub fn update_frames(&mut self, mut frames: Option<&IconFrames>) {
-        if let Some(f) = frames {
-            if f.frames.is_empty() {
-                frames = None;
-            }
+        if let Some(f) = frames
+            && f.frames.is_empty()
+        {
+            frames = None;
         }
         if self.frames.as_ref() == frames {
             return;
@@ -383,14 +383,13 @@ fn find_icon(
     theme: &str,
     custom_themes: Option<CustomThemes<'_>>,
 ) -> Option<IconLookup> {
-    if name.ends_with(".png") || name.ends_with("svg") {
-        if let Ok(m) = std::fs::metadata(name) {
-            if m.is_file() {
-                return Some(IconLookup {
-                    path: Path::new(name).to_path_buf(),
-                });
-            }
-        }
+    if (name.ends_with(".png") || name.ends_with("svg"))
+        && let Ok(m) = std::fs::metadata(name)
+        && m.is_file()
+    {
+        return Some(IconLookup {
+            path: Path::new(name).to_path_buf(),
+        });
     }
     if let Some(custom) = custom_themes {
         let dir = Path::new(custom.dir);
@@ -464,12 +463,11 @@ fn find_icon_helper<'a>(
 
 fn lookup_icon(name: &str, size: i32, scale: i32, theme: &Theme) -> Option<IconLookup> {
     for dir in &theme.directories {
-        if let Some(variant) = theme.variants.get(dir) {
-            if variant.permits_size(size, scale) {
-                if let Some(path) = find_icon_in_dir(&theme.dir, dir, name) {
-                    return Some(IconLookup { path });
-                }
-            }
+        if let Some(variant) = theme.variants.get(dir)
+            && variant.permits_size(size, scale)
+            && let Some(path) = find_icon_in_dir(&theme.dir, dir, name)
+        {
+            return Some(IconLookup { path });
         }
     }
     let mut min_size = i32::MAX;

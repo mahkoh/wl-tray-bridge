@@ -102,13 +102,13 @@ pub fn init(config: Option<&str>) {
                 return Settings::default();
             }
             path_str = format!("{path}/config.toml");
-            if let Ok(mut file) = File::options().create_new(true).write(true).open(&path) {
-                if let Err(e) = file.write_all(DEFAULT_TOML.as_bytes()) {
-                    log::error!(
-                        "Could not write default config to {path}: {}",
-                        Report::new(e)
-                    );
-                }
+            if let Ok(mut file) = File::options().create_new(true).write(true).open(&path)
+                && let Err(e) = file.write_all(DEFAULT_TOML.as_bytes())
+            {
+                log::error!(
+                    "Could not write default config to {path}: {}",
+                    Report::new(e)
+                );
             }
             &path_str
         };

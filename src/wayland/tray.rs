@@ -163,12 +163,11 @@ impl Trays {
 
     pub fn handle_menu_changed(&mut self, s: &Singletons, item: &Item, delta: &SniMenuDelta) {
         for tray in self.trays.values_mut() {
-            if let Some(tray_item) = tray.items.get_mut(&item.sni.id()) {
-                if let Some(menu) = &mut tray_item.menu {
-                    if !menu.apply_delta(&item.menu, delta, s) {
-                        tray_item.menu = None;
-                    }
-                }
+            if let Some(tray_item) = tray.items.get_mut(&item.sni.id())
+                && let Some(menu) = &mut tray_item.menu
+                && !menu.apply_delta(&item.menu, delta, s)
+            {
+                tray_item.menu = None;
             }
         }
     }

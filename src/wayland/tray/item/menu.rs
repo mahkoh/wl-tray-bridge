@@ -579,10 +579,10 @@ impl OpenMenu {
         if self.id == id {
             return false;
         }
-        if let Some(open) = &mut self.child {
-            if !open.popup_done(id) {
-                self.child = None;
-            }
+        if let Some(open) = &mut self.child
+            && !open.popup_done(id)
+        {
+            self.child = None;
         }
         true
     }
@@ -619,17 +619,17 @@ impl OpenMenu {
                 for (idx, (&id, delta)) in c.iter().enumerate() {
                     if self.rows[idx].menu_id != id {
                         needs_render = true;
-                    } else if let Some(d) = delta {
-                        if let Some(p) = &d.properties {
-                            needs_render |= p.separator.is_some();
-                            needs_render |= p.label.is_some();
-                            needs_render |= p.enabled.is_some();
-                            needs_render |= p.visible.is_some();
-                            needs_render |= p.toggle_type.is_some();
-                            needs_render |= p.toggle_state.is_some();
-                            needs_render |= p.icon_name.is_some();
-                            needs_render |= p.icon_png.is_some();
-                        }
+                    } else if let Some(d) = delta
+                        && let Some(p) = &d.properties
+                    {
+                        needs_render |= p.separator.is_some();
+                        needs_render |= p.label.is_some();
+                        needs_render |= p.enabled.is_some();
+                        needs_render |= p.visible.is_some();
+                        needs_render |= p.toggle_type.is_some();
+                        needs_render |= p.toggle_state.is_some();
+                        needs_render |= p.icon_name.is_some();
+                        needs_render |= p.icon_png.is_some();
                     }
                 }
                 if let Some(child) = &mut self.child {
@@ -756,10 +756,10 @@ impl OpenMenu {
         }
         self.child = None;
         self.needs_render = true;
-        if let Some(menu) = root.items.get(&self.id) {
-            if let Some(sub) = &menu.submenu {
-                self.maybe_rerender(icon_cache, scale, root, sub, s);
-            }
+        if let Some(menu) = root.items.get(&self.id)
+            && let Some(sub) = &menu.submenu
+        {
+            self.maybe_rerender(icon_cache, scale, root, sub, s);
         }
         new
     }
