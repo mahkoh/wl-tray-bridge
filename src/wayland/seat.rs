@@ -1,5 +1,6 @@
 use {
     crate::wayland::{
+        Singletons, WlPointerHandler,
         item::Items,
         protocols::{
             cursor_shape_v1::wp_cursor_shape_device_v1::{
@@ -11,8 +12,7 @@ use {
                 wl_surface::WlSurfaceRef,
             },
         },
-        tray::{item::menu::MenuId, TraySurfaceId, Trays},
-        Singletons, WlPointerHandler,
+        tray::{TraySurfaceId, Trays, item::menu::MenuId},
     },
     std::{
         sync::atomic::{AtomicUsize, Ordering::Relaxed},

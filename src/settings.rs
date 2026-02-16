@@ -1,7 +1,7 @@
 use {
     error_reporter::Report,
     pangocairo::{cairo, pango::FontDescription},
-    serde::{de::Error, Deserialize, Deserializer},
+    serde::{Deserialize, Deserializer, de::Error},
     std::{env::var, fs::File, io::Write, sync::OnceLock},
 };
 

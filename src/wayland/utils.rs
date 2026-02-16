@@ -1,8 +1,8 @@
 use {
     crate::wayland::{
+        Singletons, WlBufferHandler,
         protocols::wayland::{wl_buffer::WlBuffer, wl_shm::WlShmFormat},
         tray::TraySurfaceId,
-        Singletons, WlBufferHandler,
     },
     memfile::{MemFile, Seal},
     std::io::{self, Write},

@@ -3,6 +3,7 @@ use {
         settings::{self},
         sni::{IconFrame, IconFrames, SniItem, SniMenuDelta, SniMenuToggleType},
         wayland::{
+            PopupId, Singletons, TrayItemId, XdgPopupHandler, XdgSurfaceHandler,
             item::Items,
             protocols::{
                 viewporter::wp_viewport::WpViewport,
@@ -22,14 +23,13 @@ use {
             scale::{Logical, Physical, Scale},
             seat::{MotionResult, Seat},
             tray::{
-                item::{
-                    icon::{render_png, CairoIcon, IconTemplate},
-                    TrayItem,
-                },
                 PopupIdType, TraySurfaceId,
+                item::{
+                    TrayItem,
+                    icon::{CairoIcon, IconTemplate, render_png},
+                },
             },
             utils::create_shm_buf,
-            PopupId, Singletons, TrayItemId, XdgPopupHandler, XdgSurfaceHandler,
         },
     },
     ahash::{AHashMap, AHashSet},
@@ -38,10 +38,10 @@ use {
     isnt::std_1::primitive::IsntStrExt,
     memfile::MemFile,
     pangocairo::{
+        FontMap,
         cairo::{self, Format, LineCap},
         functions::show_layout,
         pango::{self},
-        FontMap,
     },
     std::{
         f64::consts::PI,

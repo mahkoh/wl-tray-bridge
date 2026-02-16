@@ -1,11 +1,11 @@
 use {
     crate::{
         sni::{
-            host::{
-                menu::{Menu, DBUS_MENU},
-                Host,
-            },
             SniMenuDelta,
+            host::{
+                Host,
+                menu::{DBUS_MENU, Menu},
+            },
         },
         wayland::protocols::wayland::wl_pointer::WlPointerAxis,
     },

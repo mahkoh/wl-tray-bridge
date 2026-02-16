@@ -2,6 +2,7 @@ use {
     crate::{
         sni::{MutableProperty, SniItemId, SniMenuDelta},
         wayland::{
+            Item, Singletons, WlSurfaceHandler, WpFractionalScaleV1Handler,
             item::Items,
             protocols::{
                 wayland::{
@@ -13,12 +14,11 @@ use {
             seat::{MotionResult, Seat},
             tray::{
                 item::{
-                    menu::{MenuId, MenuInstance},
                     TrayItem,
+                    menu::{MenuId, MenuInstance},
                 },
                 protocols::{ProtoName, WaylandTray},
             },
-            Item, Singletons, WlSurfaceHandler, WpFractionalScaleV1Handler,
         },
     },
     ahash::AHashMap,

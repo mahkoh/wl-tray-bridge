@@ -3,6 +3,7 @@ use {
         settings::{self},
         sni::{MutableProperty, SniItem},
         wayland::{
+            Item, Singletons, TrayItemId, XdgPopupHandler, XdgSurfaceHandler,
             item::Items,
             protocols::{
                 fractional_scale_v1::wp_fractional_scale_v1::WpFractionalScaleV1,
@@ -24,15 +25,14 @@ use {
             scale::{Logical, Scale},
             seat::{MotionResult, MotionTimeoutTarget, Seat},
             tray::{
+                PopupId, PopupIdType, TraySurfaceId,
                 item::{
                     icon::BufferIcon,
                     menu::{MenuId, MenuInstance},
-                    tooltip::{create_tooltip, Tooltip},
+                    tooltip::{Tooltip, create_tooltip},
                 },
                 protocols::WaylandTrayItem,
-                PopupId, PopupIdType, TraySurfaceId,
             },
-            Item, Singletons, TrayItemId, XdgPopupHandler, XdgSurfaceHandler,
         },
     },
     ahash::AHashMap,

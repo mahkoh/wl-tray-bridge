@@ -9,6 +9,7 @@ use crate::wayland::{
 pub mod ext_tray_v1 {
     use {
         crate::wayland::{
+            ExtTrayItemV1Handler,
             protocols::{
                 ext_tray_v1::{
                     ext_tray_item_v1::{ExtTrayItemV1, ExtTrayItemV1KeyboardFocusHint},
@@ -18,10 +19,9 @@ pub mod ext_tray_v1 {
                 xdg_shell::xdg_popup::XdgPopup,
             },
             tray::{
-                protocols::{ProtoName, WaylandTray, WaylandTrayItem},
                 TrayItemId,
+                protocols::{ProtoName, WaylandTray, WaylandTrayItem},
             },
-            ExtTrayItemV1Handler,
         },
         std::ops::Deref,
         wl_client::proxy,
@@ -58,6 +58,7 @@ pub mod ext_tray_v1 {
 pub mod jay_tray_v1 {
     use {
         crate::wayland::{
+            JayTrayItemV1Handler,
             protocols::{
                 jay_tray_v1::{
                     jay_tray_item_v1::{JayTrayItemV1, JayTrayItemV1KeyboardFocusHint},
@@ -67,10 +68,9 @@ pub mod jay_tray_v1 {
                 xdg_shell::xdg_popup::XdgPopup,
             },
             tray::{
-                protocols::{ProtoName, WaylandTray, WaylandTrayItem},
                 TrayItemId,
+                protocols::{ProtoName, WaylandTray, WaylandTrayItem},
             },
-            JayTrayItemV1Handler,
         },
         std::ops::Deref,
         wl_client::proxy,

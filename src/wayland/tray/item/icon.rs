@@ -3,7 +3,7 @@ use {
         settings::ThemeColor,
         sni::IconFrames,
         wayland::{
-            protocols::wayland::wl_buffer::WlBuffer, utils::create_shm_buf_oneshot, Singletons,
+            Singletons, protocols::wayland::wl_buffer::WlBuffer, utils::create_shm_buf_oneshot,
         },
     },
     ahash::{AHashMap, AHashSet},
@@ -22,8 +22,8 @@ use {
         path::{Path, PathBuf},
         str::FromStr,
         sync::{
-            atomic::{AtomicUsize, Ordering::Relaxed},
             Arc, LazyLock,
+            atomic::{AtomicUsize, Ordering::Relaxed},
         },
     },
     thiserror::Error,

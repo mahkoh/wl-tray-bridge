@@ -49,10 +49,10 @@ use {
             },
             scale::{Logical, Scale},
             seat::Seat,
-            sni_proxy::{event_stream, EventSink},
+            sni_proxy::{EventSink, event_stream},
             tray::{
-                item::menu::MenuId, protocols::WaylandTray, PopupId, TrayItemId, TraySurfaceId,
-                Trays,
+                PopupId, TrayItemId, TraySurfaceId, Trays, item::menu::MenuId,
+                protocols::WaylandTray,
             },
         },
     },
@@ -65,8 +65,8 @@ use {
     thiserror::Error,
     tokio::select,
     wl_client::{
-        proxy::{self, OwnedProxy},
         Fixed, Libwayland,
+        proxy::{self, OwnedProxy},
     },
 };
 
