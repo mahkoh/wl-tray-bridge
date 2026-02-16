@@ -4,6 +4,23 @@ use {
         sni::{MutableProperty, SniItem},
         wayland::{
             item::Items,
+            protocols::{
+                fractional_scale_v1::wp_fractional_scale_v1::WpFractionalScaleV1,
+                viewporter::wp_viewport::WpViewport,
+                wayland::{
+                    wl_buffer::WlBufferRef,
+                    wl_pointer::WlPointerAxis,
+                    wl_surface::{WlSurface, WlSurfaceRef},
+                },
+                xdg_shell::{
+                    xdg_popup::XdgPopup,
+                    xdg_positioner::{
+                        XdgPositionerAnchor, XdgPositionerConstraintAdjustment,
+                        XdgPositionerGravity,
+                    },
+                    xdg_surface::XdgSurface,
+                },
+            },
             scale::{Logical, Scale},
             seat::{MotionResult, MotionTimeoutTarget, Seat},
             tray::{
@@ -15,7 +32,7 @@ use {
                 protocols::WaylandTrayItem,
                 PopupId, PopupIdType, TraySurfaceId,
             },
-            Item, Singletons, TrayItemId,
+            Item, Singletons, TrayItemId, XdgPopupHandler, XdgSurfaceHandler,
         },
     },
     ahash::AHashMap,
@@ -23,18 +40,7 @@ use {
     error_reporter::Report,
     isnt::std_1::string::IsntStringExt,
     std::{sync::Arc, time::Duration},
-    wayland_client::protocol::{wl_buffer::WlBuffer, wl_pointer::Axis, wl_surface::WlSurface},
-    wayland_protocols::{
-        wp::{
-            fractional_scale::v1::client::wp_fractional_scale_v1::WpFractionalScaleV1,
-            viewporter::client::wp_viewport::WpViewport,
-        },
-        xdg::shell::client::{
-            xdg_popup::XdgPopup,
-            xdg_positioner::{Anchor, ConstraintAdjustment, Gravity},
-            xdg_surface::XdgSurface,
-        },
-    },
+    wl_client::proxy,
 };
 
 pub mod icon;
@@ -44,8 +50,8 @@ pub mod tooltip;
 #[derive(Default)]
 pub struct TrayItemPending {
     size: Option<Logical>,
-    preferred_anchor: Option<Anchor>,
-    preferred_gravity: Option<Gravity>,
+    preferred_anchor: Option<XdgPositionerAnchor>,
+    preferred_gravity: Option<XdgPositionerGravity>,
 }
 
 pub struct TrayItem {
@@ -57,8 +63,8 @@ pub struct TrayItem {
     pub(super) item: Box<dyn WaylandTrayItem>,
     pub(super) pending: TrayItemPending,
     pub(super) size: Logical,
-    pub(super) preferred_anchor: Anchor,
-    pub(super) preferred_gravity: Gravity,
+    pub(super) preferred_anchor: XdgPositionerAnchor,
+    pub(super) preferred_gravity: XdgPositionerGravity,
     pub(super) tooltip: Option<TrayItemPopup>,
     pub(super) scale: Scale,
     pub(super) buffers: BufferIcon,
@@ -99,11 +105,11 @@ impl TrayItem {
         self.pending.size = Some(size);
     }
 
-    pub fn set_preferred_anchor(&mut self, anchor: Anchor) {
+    pub fn set_preferred_anchor(&mut self, anchor: XdgPositionerAnchor) {
         self.pending.preferred_anchor = Some(anchor);
     }
 
-    pub fn set_preferred_gravity(&mut self, gravity: Gravity) {
+    pub fn set_preferred_gravity(&mut self, gravity: XdgPositionerGravity) {
         self.pending.preferred_gravity = Some(gravity);
     }
 
@@ -137,7 +143,7 @@ impl TrayItem {
         );
         let buffer = self.buffers.get();
         self.viewport.set_destination(self.size.0, self.size.1);
-        self.surface.attach(buffer.map(|b| &b.0.buffer), 0, 0);
+        self.surface.attach(buffer.map(|b| &*b.0.buffer), 0, 0);
         self.surface.damage_buffer(0, 0, i32::MAX, i32::MAX);
         self.surface.commit();
     }
@@ -213,8 +219,8 @@ impl TrayItem {
         self.current_activation = call;
     }
 
-    pub fn find_surface(&self, surface: &WlSurface) -> Option<TraySurfaceId> {
-        if &self.surface == surface {
+    pub fn find_surface(&self, surface: &WlSurfaceRef) -> Option<TraySurfaceId> {
+        if self.surface == *surface {
             return Some(TraySurfaceId {
                 item: self.id,
                 menu: None,
@@ -315,15 +321,17 @@ impl TrayItem {
                     return;
                 }
             };
-            let positioner = s.xdg_wm_base.create_positioner(&s.qh, ());
+            let positioner = s.xdg_wm_base.create_positioner();
             positioner.set_size(tooltip.log_size.0, tooltip.log_size.1);
             positioner.set_anchor_rect(x, y, 1, 1);
-            positioner.set_anchor(Anchor::BottomLeft);
-            positioner.set_gravity(Gravity::BottomLeft);
+            positioner.set_anchor(XdgPositionerAnchor::BOTTOM_LEFT);
+            positioner.set_gravity(XdgPositionerGravity::BOTTOM_LEFT);
             positioner.set_offset(-2, 2);
-            positioner.set_constraint_adjustment(ConstraintAdjustment::all());
-            let xdg = s.xdg_wm_base.get_xdg_surface(&tooltip.surface, &s.qh, id);
-            let popup = xdg.get_popup(None, &positioner, &s.qh, id);
+            positioner.set_constraint_adjustment(XdgPositionerConstraintAdjustment::all_known());
+            let xdg = s.xdg_wm_base.get_xdg_surface(&tooltip.surface);
+            proxy::set_event_handler(&xdg, XdgSurfaceHandler { id });
+            let popup = xdg.get_popup(None, &positioner);
+            proxy::set_event_handler(&popup, XdgPopupHandler { id });
             positioner.destroy();
             self.item.get_popup(&popup, seat.wl_seat(), serial);
             tooltip.surface.commit();
@@ -335,7 +343,7 @@ impl TrayItem {
         }
     }
 
-    pub fn handle_scroll(&mut self, menu: Option<MenuId>, axis: Axis, steps: i32) {
+    pub fn handle_scroll(&mut self, menu: Option<MenuId>, axis: WlPointerAxis, steps: i32) {
         if menu.is_none() {
             self.sni.scroll(steps, axis);
         }
@@ -354,7 +362,7 @@ impl TrayItem {
         }
     }
 
-    pub fn handle_buffer_released(&mut self, menu: Option<MenuId>, buffer: &WlBuffer) {
+    pub fn handle_buffer_released(&mut self, menu: Option<MenuId>, buffer: &WlBufferRef) {
         let Some(menu_id) = menu else {
             return;
         };

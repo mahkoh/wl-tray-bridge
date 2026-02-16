@@ -2,6 +2,10 @@ use {
     crate::{
         settings::{self},
         wayland::{
+            protocols::{
+                viewporter::wp_viewport::WpViewport,
+                wayland::{wl_buffer::WlBuffer, wl_surface::WlSurface},
+            },
             scale::{Logical, Scale},
             utils::create_shm_buf_oneshot,
             Singletons,
@@ -14,8 +18,6 @@ use {
     },
     std::io,
     thiserror::Error,
-    wayland_client::protocol::{wl_buffer::WlBuffer, wl_surface::WlSurface},
-    wayland_protocols::wp::viewporter::client::wp_viewport::WpViewport,
 };
 
 #[derive(Debug, Error)]
@@ -45,8 +47,8 @@ impl Drop for Tooltip {
 
 pub fn create_tooltip(s: &Singletons, scale: Scale, text: &str) -> Result<Tooltip, TooltipError> {
     let (buffer, log) = draw(s, scale, text)?;
-    let surface = s.wl_compositor.create_surface(&s.qh, ());
-    let viewport = s.wp_viewporter.get_viewport(&surface, &s.qh, ());
+    let surface = s.wl_compositor.create_surface();
+    let viewport = s.wp_viewporter.get_viewport(&surface);
     Ok(Tooltip {
         buffer,
         surface,

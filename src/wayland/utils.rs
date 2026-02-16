@@ -1,8 +1,12 @@
 use {
-    crate::wayland::{tray::TraySurfaceId, Singletons},
+    crate::wayland::{
+        protocols::wayland::{wl_buffer::WlBuffer, wl_shm::WlShmFormat},
+        tray::TraySurfaceId,
+        Singletons, WlBufferHandler,
+    },
     memfile::{MemFile, Seal},
     std::io::{self, Write},
-    wayland_client::protocol::{wl_buffer::WlBuffer, wl_shm::Format},
+    wl_client::proxy,
 };
 
 pub fn create_shm_buf_oneshot(
@@ -22,18 +26,11 @@ pub fn create_shm_buf(
     let mut memfd = MemFile::create_sealable("wl-shm")?;
     memfd.add_seal(Seal::Shrink)?;
     memfd.write_all(data)?;
-    let pool = s
-        .wl_shm
-        .create_pool(memfd.as_fd(), data.len() as _, &s.qh, ());
-    let buffer = pool.create_buffer(
-        0,
-        size.0,
-        size.1,
-        size.0 * 4,
-        Format::Argb8888,
-        &s.qh,
-        surface,
-    );
+    let pool = s.wl_shm.create_pool(memfd.as_fd(), data.len() as _);
+    let buffer = pool.create_buffer(0, size.0, size.1, size.0 * 4, WlShmFormat::ARGB8888);
+    if let Some(id) = surface {
+        proxy::set_event_handler(&buffer, WlBufferHandler { id });
+    }
     pool.destroy();
     Ok((buffer, memfd))
 }

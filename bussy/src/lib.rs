@@ -44,6 +44,7 @@
 
 use {
     error_reporter::Report,
+    futures_util::StreamExt,
     parking_lot::Mutex,
     pin_project::pin_project,
     serde::Serialize,
@@ -71,7 +72,6 @@ use {
         task::JoinHandle,
     },
     zbus::{
-        export::futures_util::StreamExt,
         message::{Flags, Type},
         names::{BusName, InterfaceName, MemberName, UniqueName, WellKnownName},
         zvariant::{DynamicDeserialize, DynamicType, ObjectPath, OwnedValue, Str, Value},

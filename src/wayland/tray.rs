@@ -3,6 +3,12 @@ use {
         sni::{MutableProperty, SniItemId, SniMenuDelta},
         wayland::{
             item::Items,
+            protocols::{
+                wayland::{
+                    wl_buffer::WlBufferRef, wl_pointer::WlPointerAxis, wl_surface::WlSurfaceRef,
+                },
+                xdg_shell::xdg_positioner::{XdgPositionerAnchor, XdgPositionerGravity},
+            },
             scale::{Logical, Scale},
             seat::{MotionResult, Seat},
             tray::{
@@ -12,12 +18,11 @@ use {
                 },
                 protocols::{ProtoName, WaylandTray},
             },
-            Item, Singletons,
+            Item, Singletons, WlSurfaceHandler, WpFractionalScaleV1Handler,
         },
     },
     ahash::AHashMap,
-    wayland_client::protocol::{wl_buffer::WlBuffer, wl_pointer::Axis, wl_surface::WlSurface},
-    wayland_protocols::xdg::shell::client::xdg_positioner::{Anchor, Gravity},
+    wl_client::proxy,
 };
 
 pub mod item;
@@ -99,7 +104,7 @@ impl Trays {
         self.trays.get_mut(&id.tray)?.items.get_mut(&id.item)
     }
 
-    pub fn find_surface(&self, surface: &WlSurface) -> Option<TraySurfaceId> {
+    pub fn find_surface(&self, surface: &WlSurfaceRef) -> Option<TraySurfaceId> {
         for tray in self.trays.values() {
             if let Some(s) = tray.find_surface(surface) {
                 return Some(s);
@@ -149,7 +154,7 @@ impl Trays {
         item.handle_timeout(seat, items, s, surface.menu, menu_id)
     }
 
-    pub fn handle_scroll(&mut self, surface: TraySurfaceId, axis: Axis, steps: i32) {
+    pub fn handle_scroll(&mut self, surface: TraySurfaceId, axis: WlPointerAxis, steps: i32) {
         let Some(item) = self.get_item_mut(surface.item) else {
             return;
         };
@@ -175,7 +180,7 @@ impl Trays {
         item.handle_popup_repositioned(id.ty, token);
     }
 
-    pub fn handle_buffer_released(&mut self, id: TraySurfaceId, buffer: &WlBuffer) {
+    pub fn handle_buffer_released(&mut self, id: TraySurfaceId, buffer: &WlBufferRef) {
         let Some(item) = self.get_item_mut(id.item) else {
             return;
         };
@@ -276,7 +281,7 @@ pub struct TraySurfaceId {
 }
 
 impl Tray {
-    pub fn find_surface(&self, surface: &WlSurface) -> Option<TraySurfaceId> {
+    pub fn find_surface(&self, surface: &WlSurfaceRef) -> Option<TraySurfaceId> {
         for item in self.items.values() {
             if let Some(s) = item.find_surface(surface) {
                 return Some(s);
@@ -290,13 +295,15 @@ impl Tray {
             tray: self.name,
             item: item.sni.id(),
         };
-        let surface = s.wl_compositor.create_surface(&s.qh, id);
-        let fractional_scale = s
-            .wp_fractional_scale_manager_v1
-            .as_ref()
-            .map(|m| m.get_fractional_scale(&surface, &s.qh, id));
-        let viewport = s.wp_viewporter.get_viewport(&surface, &s.qh, ());
-        let ext_item = self.tray.get_tray_item(&surface, &s.qh, id);
+        let surface = s.wl_compositor.create_surface();
+        proxy::set_event_handler(&surface, WlSurfaceHandler { id });
+        let fractional_scale = s.wp_fractional_scale_manager_v1.as_ref().map(|m| {
+            let fs = m.get_fractional_scale(&surface);
+            proxy::set_event_handler(&fs, WpFractionalScaleV1Handler { id });
+            fs
+        });
+        let viewport = s.wp_viewporter.get_viewport(&surface);
+        let ext_item = self.tray.get_tray_item(&surface, id);
         self.items.insert(
             item.sni.id(),
             TrayItem {
@@ -306,8 +313,8 @@ impl Tray {
                 item: ext_item,
                 pending: Default::default(),
                 size: Logical(0, 0),
-                preferred_anchor: Anchor::None,
-                preferred_gravity: Gravity::None,
+                preferred_anchor: XdgPositionerAnchor::NONE,
+                preferred_gravity: XdgPositionerGravity::NONE,
                 sni: item.sni.clone(),
                 tooltip: None,
                 scale: Scale(120),

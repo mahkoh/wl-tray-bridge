@@ -1,8 +1,4 @@
-#![expect(
-    clippy::collapsible_else_if,
-    clippy::field_reassign_with_default,
-    clippy::single_match
-)]
+#![expect(clippy::collapsible_else_if, clippy::field_reassign_with_default)]
 
 use log::LevelFilter;
 

@@ -1,114 +1,103 @@
 mod item;
+pub mod protocols;
 mod scale;
 mod seat;
 mod sni_proxy;
 mod tray;
 mod utils;
 
+#[cfg(feature = "ext-tray")]
+use crate::wayland::protocols::ext_tray_v1::ext_tray_v1::ExtTrayV1;
 use {
     crate::{
         sni::{MutableProperty, SniItem, SniMenuDelta},
         wayland::{
             item::{Item, Items},
+            protocols::{
+                cursor_shape_v1::wp_cursor_shape_manager_v1::WpCursorShapeManagerV1,
+                ext_tray_v1::ext_tray_item_v1::{ExtTrayItemV1EventHandler, ExtTrayItemV1Ref},
+                fractional_scale_v1::{
+                    wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1,
+                    wp_fractional_scale_v1::{
+                        WpFractionalScaleV1EventHandler, WpFractionalScaleV1Ref,
+                    },
+                },
+                jay_tray_v1::{
+                    jay_tray_item_v1::{JayTrayItemV1EventHandler, JayTrayItemV1Ref},
+                    jay_tray_v1::JayTrayV1,
+                },
+                viewporter::wp_viewporter::WpViewporter,
+                wayland::{
+                    wl_buffer::{WlBufferEventHandler, WlBufferRef},
+                    wl_callback::{WlCallbackEventHandler, WlCallbackRef},
+                    wl_compositor::WlCompositor,
+                    wl_display::WlDisplay,
+                    wl_pointer::{
+                        WlPointerAxis, WlPointerButtonState, WlPointerEventHandler, WlPointerRef,
+                    },
+                    wl_registry::{WlRegistry, WlRegistryEventHandler, WlRegistryRef},
+                    wl_seat::{WlSeat, WlSeatCapability, WlSeatEventHandler, WlSeatRef},
+                    wl_shm::WlShm,
+                    wl_surface::{WlSurfaceEventHandler, WlSurfaceRef},
+                },
+                xdg_shell::{
+                    xdg_popup::{XdgPopupEventHandler, XdgPopupRef},
+                    xdg_positioner::{XdgPositionerAnchor, XdgPositionerGravity},
+                    xdg_surface::{XdgSurfaceEventHandler, XdgSurfaceRef},
+                    xdg_wm_base::{XdgWmBase, XdgWmBaseEventHandler, XdgWmBaseRef},
+                },
+            },
             scale::{Logical, Scale},
             seat::Seat,
             sni_proxy::{event_stream, EventSink},
             tray::{
-                item::menu::MenuId,
-                protocols::{
-                    ext_tray_v1::client::{
-                        ext_tray_item_v1, ext_tray_item_v1::ExtTrayItemV1, ext_tray_v1::ExtTrayV1,
-                    },
-                    jay_tray_v1::client::{
-                        jay_tray_item_v1, jay_tray_item_v1::JayTrayItemV1, jay_tray_v1::JayTrayV1,
-                    },
-                    WaylandTray,
-                },
-                PopupId, TrayItemId, TraySurfaceId, Trays,
+                item::menu::MenuId, protocols::WaylandTray, PopupId, TrayItemId, TraySurfaceId,
+                Trays,
             },
         },
     },
     ahash::AHashMap,
     std::{
         convert::Infallible,
-        future::poll_fn,
-        io::{self, ErrorKind},
-        os::fd::AsFd,
+        io::{self},
         sync::Arc,
-        task::Poll,
     },
     thiserror::Error,
-    tokio::io::unix::AsyncFd,
-    wayland_backend::protocol::WEnum,
-    wayland_client::{
-        delegate_noop,
-        protocol::{
-            wl_buffer,
-            wl_callback::{self, WlCallback},
-            wl_compositor,
-            wl_pointer::{self, ButtonState, WlPointer},
-            wl_registry,
-            wl_seat::{self, WlSeat},
-            wl_shm::WlShm,
-            wl_shm_pool::WlShmPool,
-            wl_surface,
-        },
-        ConnectError, Connection, Dispatch, DispatchError, Proxy, QueueHandle,
+    tokio::select,
+    wl_client::{
+        proxy::{self, OwnedProxy},
+        Fixed, Libwayland,
     },
-    wayland_protocols::{
-        wp::{
-            cursor_shape::v1::client::{
-                wp_cursor_shape_device_v1::WpCursorShapeDeviceV1,
-                wp_cursor_shape_manager_v1::WpCursorShapeManagerV1,
-            },
-            fractional_scale::v1::client::{
-                wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1,
-                wp_fractional_scale_v1::{self, WpFractionalScaleV1},
-            },
-            single_pixel_buffer::v1::client::wp_single_pixel_buffer_manager_v1::WpSinglePixelBufferManagerV1,
-            viewporter::client::{wp_viewport::WpViewport, wp_viewporter},
-        },
-        xdg::shell::client::{
-            xdg_popup::{self, XdgPopup},
-            xdg_positioner::XdgPositioner,
-            xdg_surface::{self, XdgSurface},
-            xdg_wm_base::XdgWmBase,
-        },
-    },
-    wl_buffer::WlBuffer,
-    wl_compositor::WlCompositor,
-    wl_surface::WlSurface,
-    wp_viewporter::WpViewporter,
 };
 
 #[derive(Debug, Error)]
 pub enum WaylandError {
+    #[error("Could not load libwayland")]
+    LoadLibwayland(#[source] io::Error),
     #[error("Could not connect to the compositor")]
-    ConnectCompositor(#[from] ConnectError),
+    ConnectCompositor(#[source] io::Error),
     #[error("Could not connect to dbus")]
     ConnectDbus(#[source] zbus::Error),
-    #[error("Could not create a tokio AsyncFd from the compositor fd")]
-    AsyncFd(#[source] io::Error),
-    #[error("Could not poll the wayland socket")]
-    PollWaylandSocket(#[source] io::Error),
+    #[error("Could not wait for events")]
+    WaitForEvents(#[source] io::Error),
     #[error("Could not dispatch wayland events")]
-    WaylandDispatch(#[from] DispatchError),
-    #[error("Could not send wayland message")]
-    WaylandSend(#[source] wayland_backend::client::WaylandError),
-    #[error("Could not read wayland messages")]
-    WaylandRecv(#[source] wayland_backend::client::WaylandError),
+    WaylandDispatch(#[source] io::Error),
 }
 
 pub async fn run() -> Result<Infallible, WaylandError> {
-    let conn = Connection::connect_to_env()?;
+    let lib = Libwayland::open().map_err(WaylandError::LoadLibwayland)?;
+    let conn = lib
+        .connect_to_default_display()
+        .map_err(WaylandError::ConnectCompositor)?;
 
-    let mut event_queue = conn.new_event_queue::<State>();
-    let qhandle = event_queue.handle();
+    let (_owner, queue) = conn.create_queue_with_data(c"wl-tray-bridge");
 
-    let display = conn.display();
-    display.get_registry(&qhandle, ());
+    let display = queue.display::<WlDisplay>();
+    let registry = display.get_registry();
+    proxy::set_event_handler(&registry, WlRegistryHandler);
 
-    display.sync(&qhandle, InitialRoundtrip);
+    let initial_roundtrip = display.sync();
+    proxy::set_event_handler(&initial_roundtrip, InitialRoundtrip);
 
     let dbus = zbus::Connection::session()
         .await
@@ -117,6 +106,7 @@ pub async fn run() -> Result<Infallible, WaylandError> {
     let (sink, mut stream) = event_stream();
 
     let mut state = State {
+        registry,
         singletons_opt: Default::default(),
         singletons: None,
         items: Default::default(),
@@ -126,36 +116,19 @@ pub async fn run() -> Result<Infallible, WaylandError> {
         dbus: dbus.connection.clone(),
     };
 
-    let afd = AsyncFd::new(conn.as_fd()).map_err(WaylandError::AsyncFd)?;
-    poll_fn(|cx| loop {
-        stream.poll(cx, &mut state);
-        let registered_interest = match afd.poll_read_ready(cx) {
-            Poll::Ready(r) => {
-                r.map_err(WaylandError::PollWaylandSocket)?.clear_ready();
-                false
-            }
-            Poll::Pending => true,
-        };
-        let mut read_any = true;
-        if let Some(guard) = conn.prepare_read() {
-            match guard.read() {
-                Ok(0) => read_any = false,
-                Ok(_) => {}
-                Err(wayland_backend::client::WaylandError::Io(e))
-                    if e.kind() == ErrorKind::WouldBlock =>
-                {
-                    read_any = false;
+    loop {
+        select! {
+            res = queue.wait_for_events() => {
+                res.map_err(WaylandError::WaitForEvents)?;
+                queue.dispatch_pending(&mut state).map_err(WaylandError::WaylandDispatch)?;
+            },
+            action = stream.poll() => {
+                if let Some(action) = action {
+                    action(&mut state);
                 }
-                Err(e) => return Poll::Ready(Err(WaylandError::WaylandRecv(e))),
             }
         }
-        let dispatched_any = event_queue.dispatch_pending(&mut state)? > 0;
-        event_queue.flush().map_err(WaylandError::WaylandSend)?;
-        if registered_interest && !read_any && !dispatched_any {
-            return Poll::Pending;
-        }
-    })
-    .await
+    }
 }
 
 #[derive(Default)]
@@ -171,7 +144,6 @@ struct SingletonsOpt {
 
 struct Singletons {
     sink: EventSink,
-    qh: QueueHandle<State>,
     wl_compositor: WlCompositor,
     wl_shm: WlShm,
     wp_viewporter: WpViewporter,
@@ -182,6 +154,7 @@ struct Singletons {
 }
 
 struct State {
+    registry: WlRegistry,
     singletons_opt: SingletonsOpt,
     singletons: Option<Singletons>,
     items: Items,
@@ -272,18 +245,13 @@ impl State {
             .open_root_menu(seat, &self.items, s(&self.singletons), tray_item);
     }
 
-    fn bind_tray<T>(
-        &mut self,
-        registry: &wl_registry::WlRegistry,
-        name: u32,
-        qh: &QueueHandle<Self>,
-    ) where
+    fn bind_tray<T>(&mut self, registry: &WlRegistry, name: u32)
+    where
         T: 'static,
         T: WaylandTray,
-        T: Proxy,
-        Self: Dispatch<T, ()>,
+        T: OwnedProxy,
     {
-        let tray = registry.bind::<T, _, _>(name, 1, qh, ());
+        let tray = registry.bind::<T>(name, 1);
         let tray = self.trays.create_tray(Box::new(tray), name);
         if let Some(tray) = tray {
             if let Some(s) = &self.singletons {
@@ -295,83 +263,73 @@ impl State {
     }
 }
 
-impl Dispatch<wl_registry::WlRegistry, ()> for State {
-    fn event(
-        state: &mut Self,
-        registry: &wl_registry::WlRegistry,
-        event: wl_registry::Event,
-        _: &(),
-        _: &Connection,
-        qh: &QueueHandle<Self>,
+struct WlRegistryHandler;
+
+impl WlRegistryEventHandler for WlRegistryHandler {
+    type Data = State;
+
+    fn global(
+        &self,
+        state: &mut Self::Data,
+        _slf: &WlRegistryRef,
+        name: u32,
+        interface: &str,
+        version: u32,
     ) {
-        use wl_registry::Event;
-        match event {
-            Event::Global {
-                name,
-                interface,
-                version,
-            } => match &interface[..] {
-                "wl_compositor" => {
-                    state.singletons_opt.wl_compositor =
-                        Some(registry.bind::<WlCompositor, _, _>(name, 4, qh, ()));
-                }
-                "wl_shm" => {
-                    state.singletons_opt.wl_shm =
-                        Some(registry.bind::<WlShm, _, _>(name, 1, qh, ()));
-                }
-                "wp_viewporter" => {
-                    state.singletons_opt.wp_viewporter =
-                        Some(registry.bind::<WpViewporter, _, _>(name, 1, qh, ()));
-                }
-                "wp_fractional_scale_manager_v1" => {
-                    state.singletons_opt.wp_fractional_scale_manager_v1 =
-                        Some(registry.bind::<WpFractionalScaleManagerV1, _, _>(name, 1, qh, ()));
-                }
-                "xdg_wm_base" => {
-                    let version = version.min(6);
-                    state.singletons_opt.xdg_wm_base =
-                        Some(registry.bind::<XdgWmBase, _, _>(name, version, qh, ()));
-                    state.singletons_opt.xdg_wm_base_version = version;
-                }
-                "wp_cursor_shape_manager_v1" => {
-                    state.singletons_opt.wp_cursor_shape_manager_v1 =
-                        Some(registry.bind::<WpCursorShapeManagerV1, _, _>(name, 1, qh, ()));
-                }
-                #[cfg(feature = "ext-tray")]
-                "ext_tray_v1" => {
-                    state.bind_tray::<ExtTrayV1>(registry, name, qh);
-                }
-                "jay_tray_v1" => {
-                    state.bind_tray::<JayTrayV1>(registry, name, qh);
-                }
-                "wl_seat" => {
-                    let seat = registry.bind::<WlSeat, _, _>(name, version.min(8), qh, name);
-                    state.seats.insert(name, Seat::new(seat, name));
-                }
-                _ => {}
-            },
-            Event::GlobalRemove { name } => {
-                if let Some(mut seat) = state.seats.remove(&name) {
-                    seat.handle_remove(&mut state.trays);
-                }
-                state.trays.handle_global_remove(name);
+        let registry = &state.registry;
+        match interface {
+            WlCompositor::INTERFACE => {
+                state.singletons_opt.wl_compositor = Some(registry.bind(name, 4));
+            }
+            WlShm::INTERFACE => {
+                state.singletons_opt.wl_shm = Some(registry.bind(name, 1));
+            }
+            WpViewporter::INTERFACE => {
+                state.singletons_opt.wp_viewporter = Some(registry.bind(name, 1));
+            }
+            WpFractionalScaleManagerV1::INTERFACE => {
+                state.singletons_opt.wp_fractional_scale_manager_v1 = Some(registry.bind(name, 1));
+            }
+            XdgWmBase::INTERFACE => {
+                let version = version.min(6);
+                let xdg_wm_base = registry.bind(name, version);
+                proxy::set_event_handler(&xdg_wm_base, XdgWmBaseHandler);
+                state.singletons_opt.xdg_wm_base = Some(xdg_wm_base);
+                state.singletons_opt.xdg_wm_base_version = version;
+            }
+            WpCursorShapeManagerV1::INTERFACE => {
+                state.singletons_opt.wp_cursor_shape_manager_v1 = Some(registry.bind(name, 1));
+            }
+            #[cfg(feature = "ext-tray")]
+            ExtTrayV1::INTERFACE => {
+                state.bind_tray::<ExtTrayV1>(&registry.clone(), name);
+            }
+            JayTrayV1::INTERFACE => {
+                state.bind_tray::<JayTrayV1>(&registry.clone(), name);
+            }
+            WlSeat::INTERFACE => {
+                let seat = registry.bind(name, version.min(8));
+                proxy::set_event_handler(&seat, WlSeatHandler { name });
+                state.seats.insert(name, Seat::new(seat, name));
             }
             _ => {}
         }
+    }
+
+    fn global_remove(&self, state: &mut Self::Data, _slf: &WlRegistryRef, name: u32) {
+        if let Some(mut seat) = state.seats.remove(&name) {
+            seat.handle_remove(&mut state.trays);
+        }
+        state.trays.handle_global_remove(name);
     }
 }
 
 struct InitialRoundtrip;
 
-impl Dispatch<WlCallback, InitialRoundtrip> for State {
-    fn event(
-        state: &mut Self,
-        _proxy: &WlCallback,
-        _event: wl_callback::Event,
-        _data: &InitialRoundtrip,
-        _conn: &Connection,
-        qh: &QueueHandle<Self>,
-    ) {
+impl WlCallbackEventHandler for InitialRoundtrip {
+    type Data = State;
+
+    fn done(&self, state: &mut Self::Data, _slf: &WlCallbackRef, _callback_data: u32) {
         macro_rules! get {
             ($name:ident) => {{
                 match state.singletons_opt.$name.take() {
@@ -385,7 +343,6 @@ impl Dispatch<WlCallback, InitialRoundtrip> for State {
         }
         let singletons = Singletons {
             sink: state.sink.clone(),
-            qh: qh.clone(),
             wl_compositor: get!(wl_compositor),
             wl_shm: get!(wl_shm),
             wp_viewporter: get!(wp_viewporter),
@@ -406,301 +363,331 @@ impl Dispatch<WlCallback, InitialRoundtrip> for State {
     }
 }
 
-impl Dispatch<ExtTrayItemV1, TrayItemId> for State {
-    fn event(
-        state: &mut Self,
-        _proxy: &ExtTrayItemV1,
-        event: ext_tray_item_v1::Event,
-        &id: &TrayItemId,
-        _conn: &Connection,
-        _qhandle: &QueueHandle<Self>,
+struct XdgWmBaseHandler;
+
+impl XdgWmBaseEventHandler for XdgWmBaseHandler {
+    type Data = State;
+
+    fn ping(&self, _data: &mut Self::Data, slf: &XdgWmBaseRef, serial: u32) {
+        slf.pong(serial);
+    }
+}
+
+struct ExtTrayItemV1Handler {
+    id: TrayItemId,
+}
+
+impl ExtTrayItemV1EventHandler for ExtTrayItemV1Handler {
+    type Data = State;
+
+    fn configure_size(
+        &self,
+        state: &mut Self::Data,
+        _slf: &ExtTrayItemV1Ref,
+        width: i32,
+        height: i32,
     ) {
-        let Some(tray_item) = state.trays.get_item_mut(id) else {
+        let Some(tray_item) = state.trays.get_item_mut(self.id) else {
             return;
         };
-        use ext_tray_item_v1::Event;
-        match event {
-            Event::ConfigureSize { width, height } => {
-                tray_item.configure_size(Logical(width, height));
-            }
-            Event::PreferredAnchor {
-                anchor: WEnum::Value(anchor),
-            } => {
-                tray_item.set_preferred_anchor(anchor);
-            }
-            Event::PreferredGravity {
-                gravity: WEnum::Value(gravity),
-            } => {
-                tray_item.set_preferred_gravity(gravity);
-            }
-            Event::Configure { serial } => {
-                let Some(item) = state.items.items.get(&id.item) else {
-                    return;
-                };
-                tray_item.configure(Some(serial), s(&state.singletons), item);
-            }
-            _ => {}
-        }
+        tray_item.configure_size(Logical(width, height));
     }
-}
 
-impl Dispatch<JayTrayItemV1, TrayItemId> for State {
-    fn event(
-        state: &mut Self,
-        _proxy: &JayTrayItemV1,
-        event: jay_tray_item_v1::Event,
-        &id: &TrayItemId,
-        _conn: &Connection,
-        _qhandle: &QueueHandle<Self>,
+    fn preferred_anchor(
+        &self,
+        state: &mut Self::Data,
+        _slf: &ExtTrayItemV1Ref,
+        anchor: XdgPositionerAnchor,
     ) {
-        let Some(tray_item) = state.trays.get_item_mut(id) else {
+        let Some(tray_item) = state.trays.get_item_mut(self.id) else {
             return;
         };
-        use jay_tray_item_v1::Event;
-        match event {
-            Event::ConfigureSize { width, height } => {
-                tray_item.configure_size(Logical(width, height));
-            }
-            Event::PreferredAnchor {
-                anchor: WEnum::Value(anchor),
-            } => {
-                tray_item.set_preferred_anchor(anchor);
-            }
-            Event::PreferredGravity {
-                gravity: WEnum::Value(gravity),
-            } => {
-                tray_item.set_preferred_gravity(gravity);
-            }
-            Event::Configure { serial } => {
-                let Some(item) = state.items.items.get(&id.item) else {
-                    return;
-                };
-                tray_item.configure(Some(serial), s(&state.singletons), item);
-            }
-            _ => {}
-        }
+        tray_item.set_preferred_anchor(anchor);
     }
-}
 
-impl Dispatch<WlSeat, u32> for State {
-    fn event(
-        state: &mut Self,
-        _proxy: &WlSeat,
-        event: wl_seat::Event,
-        name: &u32,
-        _conn: &Connection,
-        _qhandle: &QueueHandle<Self>,
+    fn preferred_gravity(
+        &self,
+        state: &mut Self::Data,
+        _slf: &ExtTrayItemV1Ref,
+        gravity: XdgPositionerGravity,
     ) {
-        let Some(seat) = state.seats.get_mut(name) else {
+        let Some(tray_item) = state.trays.get_item_mut(self.id) else {
             return;
         };
-        use wl_seat::Event;
-        match event {
-            Event::Capabilities {
-                capabilities: WEnum::Value(c),
-            } => {
-                seat.update_capabilities(s(&state.singletons), &mut state.trays, c);
-            }
-            _ => {}
-        }
+        tray_item.set_preferred_gravity(gravity);
     }
-}
 
-impl Dispatch<WlPointer, u32> for State {
-    fn event(
-        state: &mut Self,
-        _proxy: &WlPointer,
-        event: wl_pointer::Event,
-        &name: &u32,
-        _conn: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-        let Some(seat) = state.seats.get_mut(&name) else {
+    fn configure(&self, state: &mut Self::Data, _slf: &ExtTrayItemV1Ref, serial: u32) {
+        let Some(tray_item) = state.trays.get_item_mut(self.id) else {
             return;
         };
-        use wl_pointer::Event;
-        match event {
-            Event::Enter {
-                surface,
-                surface_x,
-                surface_y,
-                serial,
-            } => {
-                seat.handle_pointer_enter(
-                    &state.items,
-                    s(&state.singletons),
-                    &mut state.trays,
-                    surface,
-                    surface_x as i32,
-                    surface_y as i32,
-                    serial,
-                );
-            }
-            Event::Motion {
-                surface_x,
-                surface_y,
-                ..
-            } => {
-                seat.handle_pointer_motion(
-                    &state.items,
-                    s(&state.singletons),
-                    &mut state.trays,
-                    surface_x as i32,
-                    surface_y as i32,
-                    None,
-                );
-            }
-            Event::Leave { .. } => {
-                seat.handle_pointer_leave(&mut state.trays);
-            }
-            Event::Button {
-                button,
-                state: WEnum::Value(ButtonState::Pressed),
-                serial,
-                ..
-            } => {
-                seat.handle_button_pressed(
-                    s(&state.singletons),
-                    &mut state.trays,
-                    &mut state.items,
-                    button,
-                    serial,
-                );
-            }
-            Event::AxisDiscrete { .. } | Event::AxisValue120 { .. } => {
-                let (axis, value120) = match event {
-                    Event::AxisDiscrete { axis, discrete } => (axis, discrete * 120),
-                    Event::AxisValue120 { axis, value120 } => (axis, value120),
-                    _ => unreachable!(),
-                };
-                let WEnum::Value(axis) = axis else {
-                    return;
-                };
-                seat.handle_axis_value120(&mut state.trays, axis, value120);
-            }
-            _ => {}
-        }
+        let Some(item) = state.items.items.get(&self.id.item) else {
+            return;
+        };
+        tray_item.configure(Some(serial), s(&state.singletons), item);
     }
 }
 
-impl Dispatch<XdgSurface, PopupId> for State {
-    fn event(
-        state: &mut Self,
-        _proxy: &XdgSurface,
-        event: xdg_surface::Event,
-        id: &PopupId,
-        _conn: &Connection,
-        _qhandle: &QueueHandle<Self>,
+struct JayTrayItemV1Handler {
+    id: TrayItemId,
+}
+
+impl JayTrayItemV1EventHandler for JayTrayItemV1Handler {
+    type Data = State;
+
+    fn configure_size(
+        &self,
+        state: &mut Self::Data,
+        _slf: &JayTrayItemV1Ref,
+        width: i32,
+        height: i32,
     ) {
-        use xdg_surface::Event;
-        match event {
-            Event::Configure { serial } => {
-                state.trays.handle_popup_configured(*id, serial);
-            }
-            _ => {}
-        }
+        let Some(tray_item) = state.trays.get_item_mut(self.id) else {
+            return;
+        };
+        tray_item.configure_size(Logical(width, height));
     }
-}
 
-impl Dispatch<XdgPopup, PopupId> for State {
-    fn event(
-        state: &mut Self,
-        _proxy: &XdgPopup,
-        event: xdg_popup::Event,
-        id: &PopupId,
-        _conn: &Connection,
-        _qhandle: &QueueHandle<Self>,
+    fn preferred_anchor(
+        &self,
+        state: &mut Self::Data,
+        _slf: &JayTrayItemV1Ref,
+        anchor: XdgPositionerAnchor,
     ) {
-        use xdg_popup::Event;
-        match event {
-            Event::PopupDone => {
-                state.trays.handle_popup_done(*id);
-            }
-            Event::Repositioned { token } => {
-                state.trays.handle_popup_repositioned(*id, token);
-            }
-            _ => {}
-        }
+        let Some(tray_item) = state.trays.get_item_mut(self.id) else {
+            return;
+        };
+        tray_item.set_preferred_anchor(anchor);
     }
-}
 
-impl Dispatch<WlBuffer, Option<TraySurfaceId>> for State {
-    fn event(
-        state: &mut Self,
-        proxy: &WlBuffer,
-        event: wl_buffer::Event,
-        id: &Option<TraySurfaceId>,
-        _conn: &Connection,
-        _qhandle: &QueueHandle<Self>,
+    fn preferred_gravity(
+        &self,
+        state: &mut Self::Data,
+        _slf: &JayTrayItemV1Ref,
+        gravity: XdgPositionerGravity,
     ) {
-        use wl_buffer::Event;
-        match event {
-            Event::Release => {
-                if let Some(id) = id {
-                    state.trays.handle_buffer_released(*id, proxy);
-                }
-            }
-            _ => {}
-        }
+        let Some(tray_item) = state.trays.get_item_mut(self.id) else {
+            return;
+        };
+        tray_item.set_preferred_gravity(gravity);
+    }
+
+    fn configure(&self, state: &mut Self::Data, _slf: &JayTrayItemV1Ref, serial: u32) {
+        let Some(tray_item) = state.trays.get_item_mut(self.id) else {
+            return;
+        };
+        let Some(item) = state.items.items.get(&self.id.item) else {
+            return;
+        };
+        tray_item.configure(Some(serial), s(&state.singletons), item);
     }
 }
 
-impl Dispatch<WpFractionalScaleV1, TrayItemId> for State {
-    fn event(
-        state: &mut Self,
-        _proxy: &WpFractionalScaleV1,
-        event: wp_fractional_scale_v1::Event,
-        id: &TrayItemId,
-        _conn: &Connection,
-        _qhandle: &QueueHandle<Self>,
+struct WlSeatHandler {
+    name: u32,
+}
+
+impl WlSeatEventHandler for WlSeatHandler {
+    type Data = State;
+
+    fn capabilities(
+        &self,
+        state: &mut Self::Data,
+        _slf: &WlSeatRef,
+        capabilities: WlSeatCapability,
     ) {
-        use wp_fractional_scale_v1::Event;
-        match event {
-            Event::PreferredScale { scale } => {
-                let scale = Scale(scale as _);
-                state
-                    .trays
-                    .handle_scale(&state.items, s(&state.singletons), *id, scale);
-            }
-            _ => {}
-        }
+        let Some(seat) = state.seats.get_mut(&self.name) else {
+            return;
+        };
+        seat.update_capabilities(s(&state.singletons), &mut state.trays, capabilities);
     }
 }
 
-impl Dispatch<WlSurface, TrayItemId> for State {
-    fn event(
-        state: &mut Self,
-        _proxy: &WlSurface,
-        event: wl_surface::Event,
-        id: &TrayItemId,
-        _conn: &Connection,
-        _qhandle: &QueueHandle<Self>,
+struct WlPointerHandler {
+    name: u32,
+}
+
+impl WlPointerEventHandler for WlPointerHandler {
+    type Data = State;
+
+    fn enter(
+        &self,
+        state: &mut Self::Data,
+        _slf: &WlPointerRef,
+        serial: u32,
+        surface: Option<&WlSurfaceRef>,
+        surface_x: Fixed,
+        surface_y: Fixed,
     ) {
-        use wl_surface::Event;
-        match event {
-            Event::PreferredBufferScale { factor } => {
-                let s = s(&state.singletons);
-                if s.wp_fractional_scale_manager_v1.is_none() {
-                    let scale = Scale(factor * 120);
-                    state.trays.handle_scale(&state.items, s, *id, scale);
-                }
-            }
-            _ => {}
+        let Some(surface) = surface else {
+            return;
+        };
+        let Some(seat) = state.seats.get_mut(&self.name) else {
+            return;
+        };
+        seat.handle_pointer_enter(
+            &state.items,
+            s(&state.singletons),
+            &mut state.trays,
+            surface,
+            surface_x.to_i32_floor(),
+            surface_y.to_i32_floor(),
+            serial,
+        );
+    }
+
+    fn leave(
+        &self,
+        state: &mut Self::Data,
+        _slf: &WlPointerRef,
+        _serial: u32,
+        _surface: Option<&WlSurfaceRef>,
+    ) {
+        let Some(seat) = state.seats.get_mut(&self.name) else {
+            return;
+        };
+        seat.handle_pointer_leave(&mut state.trays);
+    }
+
+    fn motion(
+        &self,
+        state: &mut Self::Data,
+        _slf: &WlPointerRef,
+        _time: u32,
+        surface_x: Fixed,
+        surface_y: Fixed,
+    ) {
+        let Some(seat) = state.seats.get_mut(&self.name) else {
+            return;
+        };
+        seat.handle_pointer_motion(
+            &state.items,
+            s(&state.singletons),
+            &mut state.trays,
+            surface_x.to_i32_floor(),
+            surface_y.to_i32_floor(),
+            None,
+        );
+    }
+
+    fn button(
+        &self,
+        state: &mut Self::Data,
+        _slf: &WlPointerRef,
+        serial: u32,
+        _time: u32,
+        button: u32,
+        button_state: WlPointerButtonState,
+    ) {
+        if button_state != WlPointerButtonState::PRESSED {
+            return;
         }
+        let Some(seat) = state.seats.get_mut(&self.name) else {
+            return;
+        };
+        seat.handle_button_pressed(
+            s(&state.singletons),
+            &mut state.trays,
+            &mut state.items,
+            button,
+            serial,
+        );
+    }
+
+    fn axis_discrete(
+        &self,
+        state: &mut Self::Data,
+        _slf: &WlPointerRef,
+        axis: WlPointerAxis,
+        discrete: i32,
+    ) {
+        let Some(seat) = state.seats.get_mut(&self.name) else {
+            return;
+        };
+        seat.handle_axis_value120(&mut state.trays, axis, discrete * 120);
+    }
+
+    fn axis_value120(
+        &self,
+        state: &mut Self::Data,
+        _slf: &WlPointerRef,
+        axis: WlPointerAxis,
+        value120: i32,
+    ) {
+        let Some(seat) = state.seats.get_mut(&self.name) else {
+            return;
+        };
+        seat.handle_axis_value120(&mut state.trays, axis, value120);
     }
 }
 
-delegate_noop!(State: ignore ExtTrayV1);
-delegate_noop!(State: ignore JayTrayV1);
-delegate_noop!(State: ignore WlCompositor);
-delegate_noop!(State: ignore WlShm);
-delegate_noop!(State: ignore WlShmPool);
-delegate_noop!(State: ignore WlSurface);
-delegate_noop!(State: ignore WpCursorShapeDeviceV1);
-delegate_noop!(State: ignore WpCursorShapeManagerV1);
-delegate_noop!(State: ignore WpFractionalScaleManagerV1);
-delegate_noop!(State: ignore WpSinglePixelBufferManagerV1);
-delegate_noop!(State: ignore WpViewport);
-delegate_noop!(State: ignore WpViewporter);
-delegate_noop!(State: ignore XdgPositioner);
-delegate_noop!(State: ignore XdgWmBase);
+struct XdgSurfaceHandler {
+    id: PopupId,
+}
+
+impl XdgSurfaceEventHandler for XdgSurfaceHandler {
+    type Data = State;
+
+    fn configure(&self, state: &mut Self::Data, _slf: &XdgSurfaceRef, serial: u32) {
+        state.trays.handle_popup_configured(self.id, serial);
+    }
+}
+
+struct XdgPopupHandler {
+    id: PopupId,
+}
+
+impl XdgPopupEventHandler for XdgPopupHandler {
+    type Data = State;
+
+    fn popup_done(&self, state: &mut Self::Data, _slf: &XdgPopupRef) {
+        state.trays.handle_popup_done(self.id);
+    }
+
+    fn repositioned(&self, state: &mut Self::Data, _slf: &XdgPopupRef, token: u32) {
+        state.trays.handle_popup_repositioned(self.id, token);
+    }
+}
+
+struct WlBufferHandler {
+    id: TraySurfaceId,
+}
+
+impl WlBufferEventHandler for WlBufferHandler {
+    type Data = State;
+
+    fn release(&self, state: &mut Self::Data, slf: &WlBufferRef) {
+        state.trays.handle_buffer_released(self.id, slf);
+    }
+}
+
+struct WpFractionalScaleV1Handler {
+    id: TrayItemId,
+}
+
+impl WpFractionalScaleV1EventHandler for WpFractionalScaleV1Handler {
+    type Data = State;
+
+    fn preferred_scale(&self, state: &mut Self::Data, _slf: &WpFractionalScaleV1Ref, scale: u32) {
+        let scale = Scale(scale as _);
+        state
+            .trays
+            .handle_scale(&state.items, s(&state.singletons), self.id, scale);
+    }
+}
+
+struct WlSurfaceHandler {
+    id: TrayItemId,
+}
+
+impl WlSurfaceEventHandler for WlSurfaceHandler {
+    type Data = State;
+
+    fn preferred_buffer_scale(&self, state: &mut Self::Data, _slf: &WlSurfaceRef, factor: i32) {
+        let s = s(&state.singletons);
+        if s.wp_fractional_scale_manager_v1.is_none() {
+            let scale = Scale(factor * 120);
+            state.trays.handle_scale(&state.items, s, self.id, scale);
+        }
+    }
+}
