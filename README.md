@@ -37,24 +37,24 @@ keep-open = false
 # These settings apply to the icons displayed in the tray area.
 [icon]
 # The color used for SVG icons that allow recoloring.
-color = "#c8c8c8ff"
+color = "#285577ff"
 
 # These settings apply to menus.
 [menu]
 # The font used in menus.
-font = "monospace 12"
+font = "monospace 8"
 # The normal font color.
-color = "#c8c8c8ff"
+color = "#ffffffff"
 # The background color.
-background-color = "#4c4c4cff"
+background-color = "#000000ff"
 # The font color when hovering over an entry.
-hover-color = "#c8c8c8ff"
+hover-color = "#ffffffff"
 # The background color when hovering over an entry.
-hover-background-color = "#00004cff"
+hover-background-color = "#285577ff"
 # The font color for disabled entries.
-disabled-color = "#808080ff"
+disabled-color = "#333333ff"
 # The border color.
-border-color = "#333333ff"
+border-color = "#3f474aff"
 # The border width.
 border-width = 1.0
 # The padding around entries.
@@ -65,13 +65,13 @@ right-to-left = true
 # These settings apply to tooltips.
 [tooltip]
 # The font used in tooltips.
-font = "monospace 12"
+font = "monospace 8"
 # The font color.
-color = "#c8c8c8ff"
+color = "#ffffffff"
 # The background color.
-background-color = "#4c4c4cff"
+background-color = "#000000ff"
 # The border color.
-border-color = "#333333ff"
+border-color = "#3f474aff"
 # The border width.
 border-width = 1.0
 # The padding around the text.
